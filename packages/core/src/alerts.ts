@@ -6,8 +6,12 @@ import type { CheckRecord } from "./types.js";
 export function warningAlertText(
   check: Pick<CheckRecord, "tokenSymbol" | "id">,
   baseUrl: string,
+  includeLinks = false,
 ): string {
-  return `Lens warning: $${check.tokenSymbol} is HIGH. Report ${baseUrl}/r/${check.id}. Not financial advice.`;
+  const closer = includeLinks
+    ? `Report ${baseUrl}/r/${check.id}.`
+    : "Full report on our scorecard.";
+  return `Lens warning: $${check.tokenSymbol} is HIGH. ${closer} Not financial advice.`;
 }
 
 export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Promise<number> {
@@ -17,7 +21,7 @@ export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Pr
     let sent = 0;
     for (const user of watchers) {
       if (await deps.store.hasAlert(user.id, check.id)) continue;
-      const text = warningAlertText(check, deps.config.publicBaseUrl);
+      const text = warningAlertText(check, deps.config.publicBaseUrl, deps.config.xReplyLinks);
       if (!user.xUserId) {
         await deps.store.saveAlert({
           id: newId(),

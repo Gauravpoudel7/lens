@@ -19,6 +19,7 @@ export * from "./providers/jupiter.js";
 export * from "./x/types.js";
 export * from "./x/mock.js";
 export * from "./x/oauth2.js";
+export * from "./x/bot-user.js";
 export * from "./store/types.js";
 export * from "./store/memory.js";
 export * from "./outcomes.js";

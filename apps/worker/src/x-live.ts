@@ -1,22 +1,33 @@
 import { TwitterApi } from "twitter-api-v2";
-import { OAuth2TokenManager, loadConfig, log, type XClient, type XPost } from "@lens/core";
+import {
+  OAuth2TokenManager,
+  loadConfig,
+  log,
+  resolveBotUserId,
+  type LensStore,
+  type XClient,
+  type XPost,
+} from "@lens/core";
 import { createPersistedOAuth2TokenStore } from "@lens/db";
 
 const TWEET_FIELDS = ["author_id", "created_at", "text", "referenced_tweets"] as const;
 
-export async function createLiveXClient(): Promise<XClient> {
+export async function createLiveXClient(
+  store: Pick<LensStore, "getCursor" | "setCursor">,
+): Promise<XClient> {
   const config = loadConfig();
   const appClient = config.xBearerToken ? new TwitterApi(config.xBearerToken) : null;
   if (config.xAuthMode === "oauth2") {
-    return oauth2Client(config, appClient);
+    return oauth2Client(config, appClient, store);
   }
-  return oauth1Client(config, appClient);
+  return oauth1Client(config, appClient, store);
 }
 
-function oauth1Client(
+async function oauth1Client(
   config: ReturnType<typeof loadConfig>,
   appClient: TwitterApi | null,
-): XClient {
+  store: Pick<LensStore, "getCursor" | "setCursor">,
+): Promise<XClient> {
   if (!config.xApiKey || !config.xApiSecret || !config.xAccessToken || !config.xAccessSecret) {
     throw new Error(
       "X_MODE=live with X_AUTH_MODE=oauth1 requires X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, and X_ACCESS_SECRET",
@@ -28,10 +39,16 @@ function oauth1Client(
     accessToken: config.xAccessToken,
     accessSecret: config.xAccessSecret,
   });
+  const user = async () => client;
+  const botUserId = await resolveBotUserId({
+    envUserId: config.xBotUserId,
+    store,
+    fetchMe: async () => (await client.v2.me()).data.id,
+  });
   return methods({
-    user: async () => client,
+    user,
     app: appClient,
-    botUserId: config.xBotUserId,
+    botUserId,
     refreshOnUnauthorized: null,
   });
 }
@@ -39,6 +56,7 @@ function oauth1Client(
 async function oauth2Client(
   config: ReturnType<typeof loadConfig>,
   appClient: TwitterApi | null,
+  cursorStore: Pick<LensStore, "getCursor" | "setCursor">,
 ): Promise<XClient> {
   if (!config.xOauth2ClientId || !config.xOauth2ClientSecret) {
     throw new Error(
@@ -59,10 +77,16 @@ async function oauth2Client(
     store,
   });
   log("x oauth2 user context", { bearerRead: Boolean(appClient) });
+  const user = async () => new TwitterApi(await manager.getAccessToken());
+  const botUserId = await resolveBotUserId({
+    envUserId: config.xBotUserId,
+    store: cursorStore,
+    fetchMe: async () => (await (await user()).v2.me()).data.id,
+  });
   return methods({
-    user: async () => new TwitterApi(await manager.getAccessToken()),
+    user,
     app: appClient,
-    botUserId: config.xBotUserId,
+    botUserId,
     refreshOnUnauthorized: () => manager.getAccessToken(true),
   });
 }
@@ -70,7 +94,7 @@ async function oauth2Client(
 function methods(input: {
   user: () => Promise<TwitterApi>;
   app: TwitterApi | null;
-  botUserId?: string;
+  botUserId: string;
   refreshOnUnauthorized: (() => Promise<string>) | null;
 }): XClient {
   const call = async <T>(fn: (client: TwitterApi) => Promise<T>): Promise<T> => {
@@ -86,7 +110,7 @@ function methods(input: {
   return {
     async listMentions(sinceId) {
       return call(async (client) => {
-        const userId = input.botUserId ?? (await client.v2.me()).data.id;
+        const userId = input.botUserId;
         const timeline = await client.v2.userMentionTimeline(userId, {
           since_id: sinceId,
           max_results: 10,

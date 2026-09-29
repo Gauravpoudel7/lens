@@ -3,6 +3,11 @@ import type { LensConfig } from "../types.js";
 
 export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 
+/** Sent only when JUPITER_API_KEY is set. Keyless api.jup.ag calls omit it. */
+export function jupiterApiKeyHeader(apiKey?: string): Record<string, string> {
+  return apiKey ? { "x-api-key": apiKey } : {};
+}
+
 export interface SwapBuilder {
   buildBuyTransaction(input: {
     userPublicKey: string;
@@ -13,7 +18,9 @@ export interface SwapBuilder {
 }
 
 export function createSwapBuilder(
-  config: Pick<LensConfig, "dataMode" | "jupiterBaseUrl" | "jupiterFeeBps" | "jupiterFeeAccount">,
+  config: Pick<LensConfig, "dataMode" | "jupiterBaseUrl" | "jupiterFeeBps" | "jupiterFeeAccount"> & {
+    jupiterApiKey?: string;
+  },
 ): SwapBuilder {
   if (config.dataMode !== "live") {
     return {
@@ -43,8 +50,12 @@ export function createSwapBuilder(
       if (feeAccount && config.jupiterFeeBps > 0) {
         params.set("platformFeeBps", String(config.jupiterFeeBps));
       }
+      const auth = jupiterApiKeyHeader(config.jupiterApiKey);
       const quoteUrl = `${config.jupiterBaseUrl}/swap/v1/quote?${params.toString()}`;
-      const quoteResponse = await fetch(quoteUrl, { signal: AbortSignal.timeout(8_000) });
+      const quoteResponse = await fetch(quoteUrl, {
+        headers: auth,
+        signal: AbortSignal.timeout(8_000),
+      });
       if (!quoteResponse.ok) {
         const body = await quoteResponse.text();
         return { error: `Jupiter quote failed (${quoteResponse.status}): ${body.slice(0, 180)}` };
@@ -52,7 +63,7 @@ export function createSwapBuilder(
       const quote = await quoteResponse.json();
       const swapResponse = await fetch(`${config.jupiterBaseUrl}/swap/v1/swap`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...auth },
         body: JSON.stringify({
           quoteResponse: quote,
           userPublicKey: input.userPublicKey,

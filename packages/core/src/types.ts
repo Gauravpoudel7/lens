@@ -155,6 +155,8 @@ export interface LensConfig {
   xAccessSecret?: string;
   xBearerToken?: string;
   xBotUserId?: string;
+  /** X posts include a URL only when this is true. Default false (Pay Per Use). */
+  xReplyLinks: boolean;
   xOauth2ClientId?: string;
   xOauth2ClientSecret?: string;
   xOauth2AccessToken?: string;
@@ -167,6 +169,7 @@ export interface LensConfig {
   pollIntervalMs: number;
   jupiterFeeBps: number;
   jupiterFeeAccount?: string;
+  jupiterApiKey?: string;
   jupiterBaseUrl: string;
   solanaKeypair?: string;
   solanaKeypairPath?: string;

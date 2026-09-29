@@ -78,6 +78,8 @@ describe("mention pipeline", () => {
     if (result.status !== "replied") return;
     expect(result.riskLevel).toBe("HIGH");
     expect(result.replyText).not.toMatch(/scam/i);
+    expect(result.replyText).toContain("Full report on our scorecard.");
+    expect(result.replyText).not.toMatch(/https?:\/\//);
     expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
     expect(result.replyText).toMatch(/claims do not match/i);
     expect(result.replyText.length).toBeLessThanOrEqual(280);

@@ -2,7 +2,7 @@
 
 The app is one Next.js server and one worker. They share a database. SQLite is the zero-config default and is fine for a single machine. Use Postgres when web and worker run as two containers, because two processes writing one SQLite file will lock.
 
-Proofs still default to devnet. Token reads and USDC payments use mainnet. Set `PUBLIC_BASE_URL` to the https URL users will open. Report links are baked into the hashed reply, so a wrong base URL becomes a permanent part of the proof.
+Proofs still default to devnet. Token reads and USDC payments use mainnet. Set `PUBLIC_BASE_URL` to the https URL users will open. The scorecard and Blinks use that URL. X replies, outbound posts, and warning DMs leave it out unless `X_REPLY_LINKS=true`, because a URL in an X post is billed much higher. The hashed proof is still the exact text that was posted, which has no URL in the default mode.
 
 Secrets go in the host's env, not in the image. See [docs/KEYS.md](docs/KEYS.md).
 

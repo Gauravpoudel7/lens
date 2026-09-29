@@ -23,7 +23,7 @@ Use this when the X developer portal gave you a client id and a client secret, n
    - Client Secret → `X_OAUTH2_CLIENT_SECRET`
 8. In `.env` set `X_MODE=live` and `X_AUTH_MODE=oauth2`.
 9. Run `npm run x:oauth2-login`. It prints a link. Open it, approve the app, and the script saves the tokens. You do not paste the access token or the refresh token into the chat. You can also paste them into `.env` as `X_OAUTH2_ACCESS_TOKEN` and `X_OAUTH2_REFRESH_TOKEN` if you already have them. The saved database row is used after the first refresh, because the old refresh token stops working.
-10. `X_BOT_USER_ID` is optional. If you leave it empty, the worker asks X who the token belongs to.
+10. `X_BOT_USER_ID` is optional. If you leave it empty, the worker calls `/2/users/me` once at startup, saves the id, and logs a line telling you to set `X_BOT_USER_ID` so the next start skips that call.
 
 If a refresh fails, or you lose the saved tokens, run `npm run x:oauth2-login` again. That writes a new pair over the old one.
 

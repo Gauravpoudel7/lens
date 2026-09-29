@@ -5,7 +5,10 @@ import { createLiveXClient } from "./x-live.js";
 bootstrapEnv();
 
 const live = process.env.X_MODE === "live";
-const runtime = await createRuntime(live ? { x: await createLiveXClient() } : undefined);
+const runtime = await createRuntime();
+if (live) {
+  runtime.x = await createLiveXClient(runtime.store);
+}
 const once = process.argv.includes("--once");
 
 async function tick(): Promise<void> {

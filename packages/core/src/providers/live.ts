@@ -12,6 +12,7 @@ import {
   parseRugcheckReport,
   type ChainSummary,
 } from "./parse.js";
+import { jupiterApiKeyHeader } from "./jupiter.js";
 import type { TokenDataProvider } from "./types.js";
 
 async function fetchJson(url: string, init?: RequestInit, attempts = 4): Promise<unknown> {
@@ -38,6 +39,7 @@ export class LiveTokenDataProvider implements TokenDataProvider {
 
   constructor(
     private readonly config: Pick<LensConfig, "dataRpcUrl" | "birdeyeApiKey" | "jupiterBaseUrl"> & {
+      jupiterApiKey?: string;
       rpcRetryAttempts?: number;
     },
   ) {}
@@ -130,7 +132,7 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     try {
       const body = (await fetchJson(
         `${this.config.jupiterBaseUrl}/price/v3?ids=${mint}`,
-        undefined,
+        { headers: jupiterApiKeyHeader(this.config.jupiterApiKey) },
         this.attempts(),
       )) as Record<
         string,

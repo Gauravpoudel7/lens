@@ -3,6 +3,8 @@ import { evaluateRisk, type RuleInput } from "../risk/engine.js";
 import {
   buildTemplateReply,
   enforceReplyPolicy,
+  SCORECARD_LINE,
+  stripReplyUrls,
   UNRESOLVED_REPLY,
   assertSafeNotice,
   type ReplyDraftInput,
@@ -34,16 +36,27 @@ const input: ReplyDraftInput = {
 };
 
 describe("reply policy", () => {
-  it("builds a template that states the level, links the report, and ends with the disclaimer", () => {
+  it("builds a link-free template that states the level and ends with the disclaimer", () => {
     const text = buildTemplateReply(input);
     expect(text).toContain("HIGH");
-    expect(text).toContain(input.reportUrl);
+    expect(text).toContain(SCORECARD_LINE);
+    expect(text).not.toContain(input.reportUrl);
+    expect(text).not.toMatch(/https?:\/\//);
     expect(text.endsWith("Not financial advice.")).toBe(true);
     expect(text).not.toMatch(/scam/i);
     expect(text.length).toBeLessThanOrEqual(280);
   });
 
-  it("strips accusations and rejects a reply that changes the risk level", () => {
+  it("keeps the report URL when links are turned on", () => {
+    const linked = { ...input, includeLinks: true };
+    const text = buildTemplateReply(linked);
+    expect(text).toContain(`Report: ${input.reportUrl}`);
+    const repaired = enforceReplyPolicy("This is HIGH risk.\nNot financial advice.", linked);
+    expect(repaired.ok).toBe(true);
+    if (repaired.ok) expect(repaired.text).toContain(input.reportUrl);
+  });
+
+  it("strips accusations and does not put the report URL back", () => {
     const cleaned = enforceReplyPolicy(
       "This scam is HIGH risk. Report: http://127.0.0.1:3847/r/abc",
       input,
@@ -51,10 +64,34 @@ describe("reply policy", () => {
     expect(cleaned.ok).toBe(true);
     if (cleaned.ok) {
       expect(cleaned.text).not.toMatch(/scam/i);
+      expect(cleaned.text).not.toContain(input.reportUrl);
+      expect(cleaned.text).toContain(SCORECARD_LINE);
       expect(cleaned.text.endsWith("Not financial advice.")).toBe(true);
     }
     const conflicted = enforceReplyPolicy("Actually this is LOW risk.\nNot financial advice.", input);
     expect(conflicted.ok).toBe(false);
+  });
+
+  it("strips https, t.co, and bare domains without eating prices or tickers", () => {
+    const raw = [
+      "$BONK is HIGH risk. Liquidity is $1.5 and holders are 39%.",
+      "See https://dexscreener.com/solana/abc and t.co/xyz plus dexscreener.com/solana/abc.",
+      "Not financial advice.",
+    ].join("\n");
+    const stripped = stripReplyUrls(raw);
+    expect(stripped).toContain("$BONK");
+    expect(stripped).toContain("1.5");
+    expect(stripped).toContain("39%");
+    expect(stripped).not.toMatch(/https?:\/\//);
+    expect(stripped).not.toMatch(/t\.co/);
+    expect(stripped).not.toMatch(/dexscreener\.com/);
+    const enforced = enforceReplyPolicy(raw, { ...input, symbol: "BONK" });
+    expect(enforced.ok).toBe(true);
+    if (enforced.ok) {
+      expect(enforced.text).not.toMatch(/https?:\/\/|t\.co|dexscreener\.com/);
+      expect(enforced.text).toContain(SCORECARD_LINE);
+      expect(enforced.text.endsWith("Not financial advice.")).toBe(true);
+    }
   });
 
   it("keeps the unresolved notice inside the wording rules", () => {

@@ -49,7 +49,7 @@ Order inside `createRiskCheck`:
 2. Load a `TokenSnapshot`.
 3. Read burned/locked claims from the parent post when there is one, otherwise from the text the user pasted.
 4. `evaluateRisk` chooses the level.
-5. The writer produces the exact reply, including the report URL.
+5. The writer produces the exact reply. By default that text has no URL and ends with “Full report on our scorecard.” Set `X_REPLY_LINKS=true` to include `Report: <url>` again.
 6. SHA-256 that string, build `lens:v1|<time>|<hash>`, publish the memo.
 7. Only after the publish succeeds, save the check. Callers post to X after that.
 
@@ -116,7 +116,7 @@ Lock heuristic (`interpretLpLock`): a majority of liquidity locked, or a classic
 
 `createReplyWriter` returns the template when `LLM_MODE=template` or no API key is set. Otherwise it calls `POST {LLM_BASE_URL}/chat/completions` with a system prompt that forbids new facts, buy/sell advice, and accusations. The response is dropped if it contains a different risk level, still says “scam” after replacement, or runs past 500 characters. The template is the fallback.
 
-The template tries to stay within 280 characters: header, the sharpest short facts that fit, report URL, disclaimer.
+The template tries to stay within 280 characters: header, the sharpest short facts that fit, then either “Full report on our scorecard.” or the report URL when `X_REPLY_LINKS=true`, then the disclaimer. `enforceReplyPolicy` strips `http`/`https`, `t.co`, and bare domains when links are off, and does not put the report URL back. The same flag covers outbound posts and warning DMs. Blinks still link to the report.
 
 ## Proof
 
@@ -132,7 +132,9 @@ Token data is mainnet. Proofs are whichever cluster `SOLANA_CLUSTER` selects. Th
 
 ## X bot
 
-`pollOnce` lists mentions after the stored cursor, oldest first, runs `processMention`, then advances the cursor even if one mention fails, so a single bad tweet cannot block the queue. It then runs `runOutboundCycle`, flushes queued DMs, and the outcome job.
+`pollOnce` lists mentions after the stored cursor, oldest first, runs `processMention`, then advances the cursor even if one mention fails, so a single bad tweet cannot block the queue. It then runs `runOutboundCycle`, flushes queued DMs, and the outcome job. The worker repeats this every `POLL_INTERVAL_MS` (default 180 seconds).
+
+The live client resolves the bot user id once, when it is constructed. `X_BOT_USER_ID` wins. Otherwise Lens reads the `x_bot_user_id` cursor, and only if that is empty calls `GET /2/users/me`, saves the id, and logs `Set X_BOT_USER_ID=...`. Mention polls reuse the in-memory id.
 
 Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUntil` is in the future. Pro is set only by `confirmUsdcCheckout` after a matching USDC balance increase on the treasury, with the checkout reference present in the transaction account keys. The counter is not incremented for Pro.
 
@@ -148,7 +150,7 @@ HTTP 429 and dropped connections retry with exponential backoff (`withRetry`, de
 
 `GET /api/actions/trade/:mint` reuses a check for that mint from the last 15 minutes, or creates a `blink` check (which is proved). HIGH risk returns `disabled: true`, no `transaction` action, and a report link. POST of a HIGH token returns 403 and does not ask Jupiter for a swap.
 
-Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. POST calls Jupiter’s lite swap API (`/swap/v1/quote`, `/swap/v1/swap`) and returns the base64 transaction. In mock data mode the swap builder returns an error string instead of a fake transaction, so a wallet is not asked to sign garbage. `JUPITER_FEE_BPS` (default 50) is sent only when `JUPITER_FEE_ACCOUNT` is set.
+Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. POST calls Jupiter at `JUPITER_BASE_URL` (default `https://api.jup.ag`) on `/swap/v1/quote` and `/swap/v1/swap`, and returns the base64 transaction. Price reads use `/price/v3` on the same host. Those paths did not change when `lite-api.jup.ag` started shutting down. Keyless requests work. `JUPITER_API_KEY`, when set, is sent as `x-api-key`. In mock data mode the swap builder returns an error string instead of a fake transaction, so a wallet is not asked to sign garbage. `JUPITER_FEE_BPS` (default 50) is sent only when `JUPITER_FEE_ACCOUNT` is set.
 
 `/actions.json` maps `/api/actions/**`.
 

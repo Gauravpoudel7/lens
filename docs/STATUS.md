@@ -2,6 +2,8 @@
 
 Updated after a live mainnet scoring run, real devnet memos, and a read-only X OAuth 2.0 check. “Done” means the path works without a paid key, or the live path was executed and the result is written here. Mock mode stays labeled. Secrets stay in `.env` and are not copied here.
 
+X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=true`. They end with “Full report on our scorecard.” instead of a report URL, because a URL on X Pay Per Use costs much more than a post without one. The worker poll defaults to 180 seconds. Jupiter defaults to `https://api.jup.ag` (same `/swap/v1` and `/price/v3` paths; `JUPITER_API_KEY` is optional). `X_BOT_USER_ID` is read from the environment or from a saved cursor; `/2/users/me` runs once per process only when both are empty.
+
 ## PRD features
 
 | # | Feature | Priority | Status | Notes |
@@ -72,9 +74,9 @@ That sample used the public RPC. `getTokenLargestAccounts` returned HTTP 429 aft
 | --- | --- | --- |
 | 1. Resolver | Done | Real parser. Symbol lookup follows `DATA_MODE`. |
 | 2. Risk engine | Done | Deterministic. Live fields from DexScreener, Solana RPC, RugCheck, optional Birdeye, Jupiter price. |
-| 3. Reply writer | Done | Template unless an LLM key is set and `LLM_MODE` is not `template`. |
+| 3. Reply writer | Done | Template unless an LLM key is set and `LLM_MODE` is not `template`. Posted text has no URL unless `X_REPLY_LINKS=true`. |
 | 4. Proof | Done | Five devnet memos in the section above. `npm run demo` stays mock. |
-| 5. X bot | User read works | `users/me` and token refresh succeeded. Mentions need X API credits. Nothing was posted. |
+| 5. X bot | User read works | `users/me` and token refresh succeeded. The worker now caches that user id. Mentions need X API credits. Nothing was posted. |
 | 6. Database and outcome job | Done | SQLite by default. Postgres when `DATABASE_URL` starts with `postgres`. |
 | 7. Scorecard, report, check form, HTTP API | Done | Port 3847. `/pro` creates a Solana Pay link when `PRO_TREASURY_WALLET` is set. |
 | 8. Blink | Done | Jupiter buy path needs `DATA_MODE=live`. |
@@ -90,7 +92,7 @@ That sample used the public RPC. `getTokenLargestAccounts` returned HTTP 429 aft
 | Proof | `mock_` signature in `ChainMemo` | Memo on `SOLANA_CLUSTER` |
 | X posts and DMs | `MockXClient` | `twitter-api-v2` with OAuth 1.0a, or OAuth 2.0 user context. Refresh tokens are saved in `XOAuth2Token` and `data/x-oauth2.json`. DMs need DM permission on the app |
 | Pro payment | Tests inject a fake chain | `getTransaction` on `PRO_RPC_URL` for a USDC balance increase |
-| Jupiter swap | Error string, no fake transaction | Lite swap API |
+| Jupiter swap | Error string, no fake transaction | `https://api.jup.ag` `/swap/v1`. Optional `x-api-key` |
 | Card checkout | `createCardRail` throws | Not built |
 
 The scorecard banner stays up while data or proof mode is mock.
@@ -106,7 +108,8 @@ The scorecard banner stays up while data or proof mode is mock.
 - The manual-check IP limit is in memory, per process. A Pro wallet on the form skips it. That wallet is not a login.
 - Two workers can double-post. Run one worker.
 - Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.
-- Replies aim for 280 characters. The policy cap is 500.
+- Replies aim for 280 characters. The policy cap is 500. Default X copy has no URL. Set `X_REPLY_LINKS=true` to include the report link again.
+- Mention polling defaults to every 180 seconds (`POLL_INTERVAL_MS`).
 - Discovery posts a token only when the rules say HIGH or LOW. A DexScreener outage logs and posts nothing new.
 - Live X posts and DMs were not sent. Mention reads and app-only reads return HTTP 402 until the X app has credits. A failed DM is stored as `failed` and is not retried forever.
 - OAuth 2.0 access tokens expire after two hours. One real refresh succeeded and the rotated tokens are stored locally, not in git. `npm run x:oauth2-login` mints a new pair when that refresh token is lost.

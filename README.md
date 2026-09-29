@@ -73,7 +73,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PROOF_MODE` | `mock` | `solana` sends a memo before posting |
 | `X_MODE` | `mock` | `live` polls and posts with the X API |
 | `LLM_MODE` | `auto` | `template` skips the model even if a key is set |
-| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Report links inside replies and Blinks |
+| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Scorecard and Blink links. Omitted from X posts unless `X_REPLY_LINKS=true` |
 | `SOLANA_CLUSTER` | `devnet` | Where proofs are written. Token data is still mainnet |
 | `SOLANA_RPC_URL` | devnet public RPC | Proof RPC |
 | `DATA_RPC_URL` | mainnet public RPC, or Helius if `HELIUS_API_KEY` is set | Mint, supply, holders |
@@ -88,14 +88,15 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `X_OAUTH2_ACCESS_TOKEN`, `X_OAUTH2_REFRESH_TOKEN` | empty | Bootstrap tokens. After a refresh, the database row is the one that works |
 | `X_OAUTH2_REDIRECT_URI` | `http://127.0.0.1:4391/callback` | Must match the callback URL on the X app |
 | `X_BEARER_TOKEN` | empty | Optional app-only read of a parent post. Cannot post or send a DM |
-| `X_BOT_USER_ID` | empty | Optional. Otherwise the worker calls `/2/users/me` |
+| `X_BOT_USER_ID` | empty | Optional. If empty, the worker calls `/2/users/me` once at startup, caches the id, and logs a hint to set this |
+| `X_REPLY_LINKS` | `false` | `true` puts `Report: <url>` back in replies, outbound posts, and warning DMs. Off by default because X bills a URL much higher |
 | `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
 | `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day |
 | `CHECK_API_LIMIT_PER_HOUR` | `30` | Manual check form, per IP, per process |
 | `OUTCOME_WINDOW_DAYS` | `7` | How long before a check is scored |
 | `SHARP_DROP_PCT` | `-30` | HIGH is right if price change is at or below this |
 | `CALL_WIN_PCT` | `20` | A call wins at or above this |
-| `POLL_INTERVAL_MS` | `60000` | Worker poll |
+| `POLL_INTERVAL_MS` | `180000` | Worker poll (mentions, outbound, scoring). 180 seconds by default to save X credits |
 | `RPC_RETRY_ATTEMPTS` | `4` | Retries for HTTP 429 and dropped RPC calls |
 | `OUTBOUND_ENABLED` | `false` | Scheduled calls and warnings |
 | `OUTBOUND_MINTS` | empty | Comma-separated mints to always consider |
@@ -106,14 +107,15 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |
 | `USDC_MINT` | mainnet USDC | Override only for a devnet payment test |
 | `PRO_RPC_URL` | same as `DATA_RPC_URL` | Mainnet RPC used to verify the USDC transfer |
-| `JUPITER_BASE_URL` | `https://lite-api.jup.ag` | Quote and swap |
+| `JUPITER_BASE_URL` | `https://api.jup.ag` | Quote, swap, and price. Paths stay `/swap/v1/quote`, `/swap/v1/swap`, and `/price/v3` |
+| `JUPITER_API_KEY` | empty | Optional. Sent as `x-api-key` when set. Keyless calls work on the free tier |
 | `JUPITER_FEE_BPS` | `50` | 0.5%, applied only when a fee account is set |
 | `JUPITER_FEE_ACCOUNT` | empty | Jupiter referral/fee token account |
 
 ### Keys you need for a real deployment
 
 - **Solana RPC (Helius or any mainnet URL)** for mint authority, freeze authority, supply, and top holders. Public mainnet RPC works until it rate-limits you.
-- **No key** for DexScreener, RugCheck, or Jupiter lite quotes.
+- **No key** for DexScreener, RugCheck, or Jupiter. Quotes use `https://api.jup.ag` without a key. Set `JUPITER_API_KEY` only if you want the higher `x-api-key` limits from the Jupiter portal.
 - **Birdeye** only if you want their security payload (creator sold percent, when the API returns it).
 - **A devnet keypair with SOL** for on-chain proofs. Run `npm run setup:devnet`. The JSON array stays in `data/`, which is gitignored. If the public faucet returns 429, fund the printed pubkey from [faucet.solana.com](https://faucet.solana.com) (Devnet, GitHub login) and run the script again. Set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`. Then `npm run demo:devnet`.
 - **`PRO_TREASURY_WALLET`** if you want the Pro page to create a Solana Pay link. No card processor is wired up. The card rail is an interface that returns “not configured”.
