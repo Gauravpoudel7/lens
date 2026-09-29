@@ -1,0 +1,11 @@
+{
+  "name": "@lens/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lens/core": "*",
+    "@lens/db": "*",
+    "twitter-api-v2": "^1.27.0"
+  }
+}

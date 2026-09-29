@@ -1,0 +1,14 @@
+{
+  "name": "@lens/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lens/core": "*",
+    "@prisma/client": "^6.16.2",
+    "dotenv": "^17.2.2"
+  }
+}

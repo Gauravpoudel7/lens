@@ -1,0 +1,85 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+
+export function CheckForm({
+  examples,
+}: {
+  examples: Array<{ label: string; value: string }>;
+}) {
+  const router = useRouter();
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const value = input.trim();
+    if (!value) {
+      setError("Paste a token address, a $ticker, or the text of a post.");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: value }),
+      });
+      const body = (await response.json()) as { id?: string; error?: string };
+      if (!response.ok || !body.id) {
+        setError(body.error ?? "The check did not finish.");
+        setPending(false);
+        return;
+      }
+      router.push(`/r/${body.id}`);
+    } catch {
+      setError("The check request failed. Is the server still running?");
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="mt-6 space-y-3">
+      <label htmlFor="token-input" className="text-sm">
+        Post text or token address
+      </label>
+      <Textarea
+        id="token-input"
+        name="input"
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        placeholder="CA: paste a Solana mint, or a post that says $TICKER"
+        disabled={pending}
+      />
+      <div className="flex flex-wrap gap-2">
+        {examples.map((example) => (
+          <Button
+            key={example.label}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setInput(example.value);
+              setError(null);
+            }}
+          >
+            {example.label}
+          </Button>
+        ))}
+      </div>
+      {error ? (
+        <p className="border border-high/30 bg-[#f8e8e4] px-3 py-2 text-sm text-high" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" disabled={pending}>
+        {pending ? "Checking…" : "Run the check"}
+      </Button>
+    </form>
+  );
+}

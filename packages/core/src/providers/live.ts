@@ -1,0 +1,185 @@
+import { PublicKey } from "@solana/web3.js";
+import { log, safeUrl } from "../ids.js";
+import type { LensConfig, TokenSnapshot } from "../types.js";
+import {
+  holderStats,
+  mergeTokenData,
+  parseBirdeyeSecurity,
+  parseDexSearch,
+  parseDexTokenResponse,
+  parseMintAccount,
+  parseRugcheckReport,
+  type ChainSummary,
+} from "./parse.js";
+import type { TokenDataProvider } from "./types.js";
+
+async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
+  const response = await fetch(url, {
+    ...init,
+    signal: AbortSignal.timeout(8_000),
+    headers: { accept: "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status} for ${safeUrl(url)}: ${body.slice(0, 180)}`);
+  }
+  return response.json();
+}
+
+export class LiveTokenDataProvider implements TokenDataProvider {
+  readonly name = "live";
+
+  constructor(private readonly config: Pick<LensConfig, "dataRpcUrl" | "birdeyeApiKey" | "jupiterBaseUrl">) {}
+
+  async resolveBySymbol(symbol: string) {
+    try {
+      const body = await fetchJson(
+        `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(symbol)}`,
+      );
+      return parseDexSearch(symbol, body);
+    } catch (err) {
+      log("DexScreener search failed", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  async getToken(mint: string): Promise<TokenSnapshot | null> {
+    const [dex, rug, chain, birdeye] = await Promise.all([
+      this.dex(mint),
+      this.rug(mint),
+      this.chain(mint),
+      this.birdeye(mint),
+    ]);
+    const merged = mergeTokenData({ mint, dex, rug, chain, birdeye });
+    if (!merged) return null;
+    if (merged.priceUsd == null) {
+      merged.priceUsd = await this.jupiterPrice(mint);
+    }
+    return merged;
+  }
+
+  async getPrice(mint: string): Promise<number | null> {
+    const jupiter = await this.jupiterPrice(mint);
+    if (jupiter != null) return jupiter;
+    const dex = await this.dex(mint);
+    return dex?.priceUsd ?? null;
+  }
+
+  private async dex(mint: string) {
+    try {
+      const body = await fetchJson(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      return parseDexTokenResponse(mint, body);
+    } catch (err) {
+      log("DexScreener token failed", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  private async rug(mint: string) {
+    try {
+      const body = await fetchJson(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`);
+      return parseRugcheckReport(body);
+    } catch (err) {
+      log("RugCheck failed", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  private async birdeye(mint: string) {
+    if (!this.config.birdeyeApiKey) return null;
+    try {
+      const body = await fetchJson(
+        `https://public-api.birdeye.so/defi/token_security?address=${mint}`,
+        {
+          headers: {
+            "X-API-KEY": this.config.birdeyeApiKey,
+            "x-chain": "solana",
+          },
+        },
+      );
+      return parseBirdeyeSecurity(body);
+    } catch (err) {
+      log("Birdeye security failed", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  private async jupiterPrice(mint: string): Promise<number | null> {
+    try {
+      const body = (await fetchJson(`${this.config.jupiterBaseUrl}/price/v3?ids=${mint}`)) as Record<
+        string,
+        { usdPrice?: number }
+      >;
+      const price = body[mint]?.usdPrice;
+      return typeof price === "number" ? price : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async chain(mint: string): Promise<ChainSummary | null> {
+    try {
+      const account = await this.rpc("getAccountInfo", [mint, { encoding: "base64" }]);
+      const value = (account as { value?: { data?: [string, string] } | null }).value;
+      if (!value?.data?.[0]) return null;
+      const parsed = parseMintAccount(Buffer.from(value.data[0], "base64"));
+      if (!parsed) return null;
+      const largest = await this.rpc("getTokenLargestAccounts", [mint]);
+      const rows =
+        ((largest as { value?: Array<{ address: string; amount: string }> }).value ?? []);
+      const owners = await this.owners(rows.map((row) => row.address));
+      const stats = holderStats(
+        parsed.supply,
+        rows.map((row) => ({
+          amount: BigInt(row.amount),
+          owner: owners.get(row.address) ?? null,
+        })),
+      );
+      return {
+        decimals: parsed.decimals,
+        supply: parsed.supply,
+        mintAuthorityActive: parsed.mintAuthority != null,
+        freezeAuthorityActive: parsed.freezeAuthority != null,
+        top10HolderPct: stats.top10HolderPct,
+        burnedPct: stats.burnedPct,
+      };
+    } catch (err) {
+      log("Solana RPC token read failed", err instanceof Error ? err.message : err);
+      return null;
+    }
+  }
+
+  private async owners(addresses: string[]): Promise<Map<string, string | null>> {
+    const result = new Map<string, string | null>();
+    if (addresses.length === 0) return result;
+    const body = await this.rpc("getMultipleAccounts", [addresses, { encoding: "base64" }]);
+    const values = (body as { value?: Array<{ data?: [string, string] } | null> }).value ?? [];
+    addresses.forEach((address, index) => {
+      const encoded = values[index]?.data?.[0];
+      if (!encoded) {
+        result.set(address, null);
+        return;
+      }
+      const data = Buffer.from(encoded, "base64");
+      if (data.length < 64) {
+        result.set(address, null);
+        return;
+      }
+      result.set(address, new PublicKey(data.subarray(32, 64)).toBase58());
+    });
+    return result;
+  }
+
+  private async rpc(method: string, params: unknown[]): Promise<unknown> {
+    const response = await fetch(this.config.dataRpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) throw new Error(`RPC HTTP ${response.status} ${method}`);
+    const json = (await response.json()) as { result?: unknown; error?: { message?: string } };
+    if (json.error) throw new Error(json.error.message ?? `RPC ${method} failed`);
+    return json.result;
+  }
+}

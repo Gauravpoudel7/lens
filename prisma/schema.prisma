@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Mention {
+  id           String   @id
+  xUserId      String
+  xUsername    String
+  parentPostId String?
+  text         String
+  parentText   String?
+  status       String
+  skipReason   String?
+  checkId      String?
+  createdAt    DateTime @default(now())
+  replies      Reply[]
+
+  @@index([xUserId])
+}
+
+model Check {
+  id             String    @id
+  kind           String
+  mentionId      String?
+  parentPostId   String?
+  tokenMint      String
+  tokenSymbol    String
+  tokenName      String
+  riskLevel      String
+  score          Int
+  dangerCount    Int
+  cautionCount   Int
+  unknownCount   Int
+  factsJson      String
+  snapshotJson   String
+  claimsJson     String
+  sourcesJson    String
+  dataMode       String
+  replyText      String
+  sourcePostText String?
+  priceAtCheck   Float?
+  askedBy        String?
+  status         String
+  error          String?
+  xPostId        String?
+  createdAt      DateTime  @default(now())
+  proof          Proof?
+  outcome        Outcome?
+  replies        Reply[]
+
+  @@index([parentPostId, tokenMint])
+  @@index([tokenMint, createdAt])
+  @@index([createdAt])
+  @@index([mentionId])
+}
+
+model Proof {
+  id          String   @id
+  checkId     String   @unique
+  check       Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  contentHash String
+  signedAt    DateTime
+  payload     String
+  txSignature String?
+  cluster     String
+  status      String
+  explorerUrl String?
+  createdAt   DateTime @default(now())
+}
+
+model Outcome {
+  id             String   @id
+  checkId        String   @unique
+  check          Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  priceAtCheck   Float?
+  priceAtScore   Float?
+  priceChangePct Float?
+  windowDays     Int
+  labelCorrect   Boolean?
+  callResult     String
+  scoredAt       DateTime @default(now())
+}
+
+model Reply {
+  id        String   @id
+  mentionId String
+  mention   Mention  @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  checkId   String
+  check     Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  xReplyId  String?
+  text      String
+  cached    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([mentionId])
+}
+
+model UsageDay {
+  id      String @id
+  xUserId String
+  day     String
+  count   Int    @default(0)
+
+  @@unique([xUserId, day])
+}
+
+model ChainMemo {
+  signature String   @id
+  payload   String
+  cluster   String
+  createdAt DateTime @default(now())
+}
+
+model BotCursor {
+  id      String @id
+  sinceId String
+}

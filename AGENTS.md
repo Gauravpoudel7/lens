@@ -1,0 +1,58 @@
+# Agents
+
+You are continuing Lens, the @askLens Solana risk bot. Read `docs/STATUS.md` and `docs/ARCHITECTURE.md` before editing. The product promise is a public record that cannot be quietly rewritten. Do not weaken that to make a demo look better.
+
+## How to run
+
+```bash
+npm install
+npm test
+npm run demo
+npm run dev
+```
+
+The app is http://127.0.0.1:3847. `npm run demo` forces mock mode. Do not point the demo at mainnet or at the X API.
+
+## Rules you must not break
+
+- Risk level is decided only in `packages/core/src/risk/engine.ts`. Do not call a model from that file, and do not let the reply writer change the level.
+- The model has no tools and no wallet. If you add a tool, you have violated the PRD.
+- User-facing copy does not contain the word “scam”. Facts, with sources. Every reply ends with `Not financial advice.`
+- Publish the proof before posting to X, replying, or returning a manual check. If the proof fails, do not post.
+- Hash the exact reply string that will be shown. Do not hash a draft and then edit the text.
+- Mock data must stay labeled. Do not present fixture numbers as mainnet facts.
+- Do not commit `.env`, keypairs, or `data/*.db`.
+- Token reads are mainnet. Proofs default to devnet. Do not “simplify” that by reading devnet mints or writing memos to mainnet by default.
+- Lens does not custody funds and does not tell people to buy or sell.
+- Pro alerts are out of scope until someone explicitly asks for them.
+
+## Where to change things
+
+| Task | Start here |
+| --- | --- |
+| Threshold or a new rule | `packages/core/src/risk/engine.ts` and `thresholds.ts`. Add a test in `engine.test.ts`. |
+| A new data source | Implement `TokenDataProvider` or extend `LiveTokenDataProvider` and the parsers in `providers/parse.ts`. Keep RPC and HTTP behind that interface. Add a parser test with a fixture payload, not a live call. |
+| Reply wording | `packages/core/src/reply/policy.ts`. Keep the template under 280 characters when you can. |
+| Proof format | `packages/core/src/proof/hash.ts`. Bump the memo prefix (`lens:v2`) if the format changes, and keep v1 verify working. |
+| Schema | `prisma/schema.prisma`, then `packages/db/src/store.ts` and `MemoryStore`. Run `npm run db:push`. |
+| Scorecard UI | `apps/web`. Server Components for reads. Do not import Prisma into a client component. |
+| X API | `apps/worker/src/x-live.ts` only. The web app stays on the mock client. |
+| Blink | `packages/core/src/blink.ts` for the JSON, the route for Jupiter. HIGH must not gain a buy action. |
+
+## Conventions
+
+- TypeScript, ESM, `.js` specifiers in `packages/core` imports so Node and Vitest resolve the TypeScript source.
+- npm workspaces. Packages are `@lens/core`, `@lens/db`, `@lens/web`, `@lens/worker`.
+- Two-space indent, double quotes, no lorem, no “welcome to your app”.
+- shadcn-style primitives live in `apps/web/components/ui`. Add new ones with the same `cva` pattern. `components.json` is set up for the shadcn CLI.
+- Config is `loadConfig()` in `packages/core/src/config.ts`. New env vars go there, in `.env.example`, and in the README table.
+- Tests are Vitest, `npm test`, files named `*.test.ts` next to the code. Risk rules and proof verify are required coverage. Do not mock the risk function in order to make a pipeline test pass. Use the real engine and the mock provider.
+- `MemoryStore` is for unit tests. The demo and the web use Prisma.
+- Log with the `[lens]` prefix. Never log API keys, keypairs, or Authorization headers. `safeUrl` strips query strings because Helius puts the key there.
+
+## Check before you finish
+
+- `npm test` passes.
+- If you changed the scorecard or the check form, load http://127.0.0.1:3847 and click through the check, the report, and verify. A screenshot of a static page is not enough.
+- Update `docs/STATUS.md` so the table matches what you actually shipped. Mark partial work as partial.
+- If you change a threshold, update the README risk section and the tests together.

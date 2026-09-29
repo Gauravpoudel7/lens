@@ -1,0 +1,161 @@
+# Architecture
+
+Lens is a TypeScript monorepo. `packages/core` holds the rules and the loop. `packages/db` is the only place that talks to Prisma. `apps/web` is the scorecard and the HTTP API. `apps/worker` polls X.
+
+The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no wallet. Proof is written before any post.
+
+## Components
+
+| Piece | Where | Role |
+| --- | --- | --- |
+| Token resolver | `packages/core/src/resolver.ts` | Pulls a base58 mint (32–44 chars) or a `$ticker` out of post text. A mint wins over a ticker. Program ids are ignored. |
+| Token data provider | `packages/core/src/providers` | `TokenDataProvider`: `resolveBySymbol`, `getToken`, `getPrice`. `MockTokenDataProvider` and `LiveTokenDataProvider`. |
+| Risk engine | `packages/core/src/risk/engine.ts` | Pure function. No network, no model. |
+| Reply writer | `packages/core/src/reply` | Template, or an OpenAI-compatible chat call. `enforceReplyPolicy` runs on both. |
+| Proof publisher | `packages/core/src/proof` | Hash, memo payload, mock store, Solana memo transaction, verify. |
+| X client | `packages/core/src/x` and `apps/worker/src/x-live.ts` | `XClient` interface. Mock is the default. Live uses `twitter-api-v2` and is constructed only by the worker. |
+| Store | `packages/core/src/store/types.ts`, Prisma in `packages/db` | Mentions, checks, proofs, outcomes, rate-limit counters, mock memos, poll cursor. |
+| Pipeline | `packages/core/src/pipeline.ts` | Mention handling, manual checks, outbound posts. |
+| Outcome job | `packages/core/src/outcomes.ts` | Price change after N days. |
+| Scorecard | `apps/web` | Server-rendered record, report page, check form, verify form. |
+| Blink | `packages/core/src/blink.ts` and `apps/web/app/api/actions/trade/[mint]` | Solana Action. Jupiter swap builder is separate. |
+
+## Data flow
+
+```mermaid
+flowchart TD
+  mention[X mention or pasted text] --> resolve[Resolver]
+  resolve --> provider[TokenDataProvider]
+  provider --> rules[Risk engine]
+  rules --> writer[Reply writer]
+  writer --> proof[Proof publisher]
+  proof --> db[(SQLite)]
+  proof --> x[X reply or outbound post]
+  db --> scorecard[Scorecard and report]
+  job[Outcome job] --> provider
+  job --> db
+  blink[Blink GET or POST] --> db
+  blink --> jupiter[Jupiter when DATA_MODE=live]
+```
+
+Order inside `createRiskCheck`:
+
+1. Resolve the mint, or use the mint that was passed in.
+2. Load a `TokenSnapshot`.
+3. Read burned/locked claims from the parent post when there is one, otherwise from the text the user pasted.
+4. `evaluateRisk` chooses the level.
+5. The writer produces the exact reply, including the report URL.
+6. SHA-256 that string, build `lens:v1|<time>|<hash>`, publish the memo.
+7. Only after the publish succeeds, save the check. Callers post to X after that.
+
+If the proof fails, nothing is posted and nothing is saved as a published check. A failed X post is still stored, with status `reply_failed`, because the proof already exists.
+
+`processMention` adds, around that core:
+
+- Skip mentions already in a terminal state (`replied`, `reply_failed`, `rate_limited`).
+- Per-user daily cap, checked before a new proof. The counter increments only after a successful reply.
+- Dedupe on parent post id + mint. A second tag on the same post gets the same proved text and does not write a second memo.
+- If no token is found, a short notice is still proved and posted. It is kind `unresolved` and is left out of win rate.
+
+Outbound posts (`publishOutbound`, `npm run post`) use kind `auto`: HIGH becomes `warning`, LOW becomes `call`, anything else becomes `note`. Win rate counts `call` only.
+
+## Data model
+
+SQLite via Prisma (`prisma/schema.prisma`).
+
+- **Mention** — one X post that tagged the bot, plus status and the check it produced.
+- **Check** — the risk record: kind, mint, level, facts JSON, snapshot JSON, reply text, price at check time, data mode (`mock` or `live`).
+- **Proof** — hash, ISO time, exact memo payload, signature, cluster (`mock`, `devnet`, or `mainnet-beta`).
+- **Outcome** — later price, percent change, `labelCorrect`, `callResult`, and the window that was used.
+- **Reply** — the X reply id for a mention. Cached replies point at the original check.
+- **UsageDay** — `user + UTC day` counter.
+- **ChainMemo** — payload for mock signatures, so the web process can verify what the demo wrote.
+- **BotCursor** — last mention id the poller handled.
+
+`MemoryStore` implements the same interface for tests.
+
+## Provider interface
+
+```ts
+interface TokenDataProvider {
+  readonly name: string;
+  resolveBySymbol(symbol: string): Promise<{ mint; symbol; name } | null>;
+  getToken(mint: string): Promise<TokenSnapshot | null>;
+  getPrice(mint: string): Promise<number | null>;
+}
+```
+
+`TokenSnapshot` is the only object the rules see: age, liquidity, lock, top-10 share, creator sold percent, creator balance percent, mint authority, freeze authority, sniper percent, burned percent, and source links.
+
+**Mock.** Three fixtures, `$DANGER`, `$SAFE`, and `$MID`, plus a deterministic synthetic profile for any other mint so the demo form always returns something. Unknown mints are labeled synthetic and `dataMode` is `mock`. The report page says so. `setPrice` lets the outcome job move the price without another check.
+
+**Live** (`LiveTokenDataProvider`), in parallel:
+
+- DexScreener for symbol, price, liquidity, and the earliest pool time in the response. No key.
+- Solana JSON-RPC (`getAccountInfo`, `getTokenLargestAccounts`, `getMultipleAccounts`) for mint layout, freeze authority, supply, top holders, and incinerator burn balance. `DATA_RPC_URL`, or Helius when `HELIUS_API_KEY` is set, otherwise the public mainnet endpoint.
+- RugCheck’s public report for holder list fallback, insider-network percent (used as the sniper figure), creator balance, and LP lock.
+- Birdeye `token_security` only when `BIRDEYE_API_KEY` is set. That is the path that can fill `creatorSoldPct`.
+- Jupiter price v3 if DexScreener has no price. `getPrice` for the outcome job prefers Jupiter, then DexScreener, so scoring does not re-download a full report.
+
+Chain fields override RugCheck for authorities and for top-10 when the RPC read succeeds. A failed source is skipped. The check is then scored with `unknown` on the missing fields. Four or more unknowns stop a token from being labeled LOW.
+
+Lock heuristic (`interpretLpLock`): a majority of liquidity locked, or a classic LP token at least 80% locked, is locked. A classic LP with almost nothing locked is unlocked. Concentrated-liquidity pools (no LP mint) with sizeable liquidity stay `unknown`, because “unlocked” would be the wrong fact. Expired locker dates are ignored.
+
+## Reply writer
+
+`createReplyWriter` returns the template when `LLM_MODE=template` or no API key is set. Otherwise it calls `POST {LLM_BASE_URL}/chat/completions` with a system prompt that forbids new facts, buy/sell advice, and accusations. The response is dropped if it contains a different risk level, still says “scam” after replacement, or runs past 500 characters. The template is the fallback.
+
+The template tries to stay within 280 characters: header, the sharpest short facts that fit, report URL, disclaimer.
+
+## Proof
+
+`hashReply` is SHA-256 over the UTF-8 bytes of the exact reply.
+
+`buildProofPayload` produces `lens:v1|<ISO time>|<hash>`. Two proofs of the same text at different times share a hash and differ in the memo.
+
+`PROOF_MODE=mock` writes the memo to `ChainMemo` and returns a `mock_` signature. Verify reads that row. It is tamper-evident inside this database. It is not a Solana transaction. The UI says so.
+
+`PROOF_MODE=solana` builds a legacy transaction with one memo instruction, signed by `SOLANA_KEYPAIR` or the file at `SOLANA_KEYPAIR_PATH`, and sends it to `SOLANA_RPC_URL` (devnet by default). Verify loads the transaction and reads memo instruction data, then log lines. If the chain time and the memo time differ by more than 30 minutes, verify fails. Mock signatures still verify from the database when you are in solana mode, so old demo rows keep working.
+
+Token data is mainnet. Proofs are whichever cluster `SOLANA_CLUSTER` selects. Those are different networks on purpose.
+
+## X bot
+
+`pollOnce` lists mentions after the stored cursor, oldest first, runs `processMention`, then advances the cursor even if one mention fails, so a single bad tweet cannot block the queue. It then runs the optional outbound watchlist and the outcome job.
+
+The live client needs OAuth 1.0a user tokens. App-only bearer auth cannot post a reply. The web app does not construct the live client. Manual checks never post to X.
+
+## Blink
+
+`GET /api/actions/trade/:mint` reuses a check for that mint from the last 15 minutes, or creates a `blink` check (which is proved). HIGH risk returns `disabled: true`, no `transaction` action, and a report link. POST of a HIGH token returns 403 and does not ask Jupiter for a swap.
+
+Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. POST calls Jupiter’s lite swap API (`/swap/v1/quote`, `/swap/v1/swap`) and returns the base64 transaction. In mock data mode the swap builder returns an error string instead of a fake transaction, so a wallet is not asked to sign garbage. `JUPITER_FEE_BPS` (default 50) is sent only when `JUPITER_FEE_ACCOUNT` is set.
+
+`/actions.json` maps `/api/actions/**`.
+
+## Scoring
+
+`judgeOutcome` is pure.
+
+- Call: `win` if change ≥ `CALL_WIN_PCT`, `loss` if change ≤ the negative of that, otherwise `flat`.
+- Warning: `correct` if change ≤ `SHARP_DROP_PCT`, else `incorrect`.
+- HIGH label: correct if change ≤ `SHARP_DROP_PCT`.
+- LOW label: correct if change is above that.
+- MEDIUM: `labelCorrect` is null.
+- Missing price at check time is stored as `unscored`. A failed price lookup is left unscored so the next job can retry.
+
+`scoreDueChecks` selects rows with `createdAt` at or before `now - windowDays`. The demo passes `windowDays: 0`.
+
+## Decisions
+
+- **SQLite, not Postgres**, so `npm run demo` needs no extra service. The store interface is the seam if Postgres is added later. Prisma can point `DATABASE_URL` at Postgres only after the datasource provider changes. It is still SQLite today.
+- **Memo program, not Anchor.** The requirement is a public hash and time. A memo is one instruction, easy to verify from any explorer, and does not need a deployed program id. An Anchor program would help if we later wanted indexed accounts or a fee. It is not needed to prove a string.
+- **Rules before the model.** The PRD calls out prompt-injection against the reply bot. The model never sees a tool and its text is rejected if the level changes.
+- **Devnet proofs, mainnet facts.** Writing memos on mainnet costs real SOL and is the wrong default for a hackathon wallet. Reading devnet token data would score fake mints. The split is explicit in config.
+- **RugCheck next to RPC.** Helius, DexScreener, Birdeye, and Jupiter are the named sources. RugCheck is an extra public report used for lock status and insider clusters, behind the same provider, and it is skipped when it fails. Birdeye stays optional because it needs a key.
+- **Do not punish missing data as danger, and do not call it a clean LOW.** Unknown is a third state. Too many unknowns become MEDIUM.
+- **Mock fixtures are obvious.** The scorecard banner and the report page say when the facts are not from mainnet.
+
+## What is intentionally out
+
+Pro alerts, paid plans, browser extension, influencer scores, and trading user funds. See `docs/STATUS.md`.

@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #efe6d4;
+  --paper-2: #f7f1e4;
+  --ink: #1c1612;
+  --muted: #6f655a;
+  --line: #d9cdb8;
+  --high: #8d2f2a;
+  --med: #8a5a12;
+  --low: #1d6a45;
+  --stamp: #f4efe4;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-high: var(--high);
+  --color-med: var(--med);
+  --color-low: var(--low);
+  --color-stamp: var(--stamp);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), "Public Sans", sans-serif;
+}
+
+.ledger-rule {
+  background-image: linear-gradient(to bottom, transparent 31px, rgba(28, 22, 18, 0.05) 32px);
+  background-size: 100% 32px;
+}
+
+::selection {
+  background: #e7c9a2;
+}
