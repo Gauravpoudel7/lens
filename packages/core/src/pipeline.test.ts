@@ -9,7 +9,8 @@ import { verifyPostedText } from "./proof/verify.js";
 import { MemoryStore } from "./store/memory.js";
 import { processMention, publishOutbound, type LensDeps } from "./pipeline.js";
 import { scoreDueChecks } from "./outcomes.js";
-import { MockXClient, type XPost } from "./x/mock.js";
+import { MockXClient } from "./x/mock.js";
+import type { XPost } from "./x/types.js";
 
 function deps(rateLimit = 5): { rt: LensDeps; x: MockXClient; provider: MockTokenDataProvider; store: MemoryStore } {
   const store = new MemoryStore();
@@ -77,6 +78,8 @@ describe("mention pipeline", () => {
     expect(result.riskLevel).toBe("HIGH");
     expect(result.replyText).not.toMatch(/scam/i);
     expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
+    expect(result.replyText).toMatch(/claims do not match/i);
+    expect(result.replyText.length).toBeLessThanOrEqual(280);
     const check = await store.getCheck(result.checkId);
     expect(check?.proof?.payload).toContain(hashReply(result.replyText));
     const verified = await verifyPostedText(rt.proofs, result.replyText, check!.proof!.txSignature!);

@@ -346,7 +346,10 @@ function claims(input: RuleInput): DraftFact | null {
   const rank: Record<Signal, number> = { danger: 3, caution: 2, unknown: 1, good: 0 };
   const worst = parts.reduce((best, part) => (rank[part.signal] > rank[best.signal] ? part : best));
   const text = parts.map((part) => part.text).join(" ");
-  const short = parts.map((part) => part.short).join(" ");
+  const short =
+    parts.filter((part) => part.signal === "danger").length > 1
+      ? "Burn and lock claims do not match the chain."
+      : parts.map((part) => part.short).join(" ");
   return draft("claims", worst.signal, text, short);
 }
 

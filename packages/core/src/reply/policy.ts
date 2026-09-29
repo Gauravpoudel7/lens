@@ -20,7 +20,13 @@ const SIGNAL_RANK: Record<Fact["signal"], number> = {
 export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): string {
   const header = `$${input.symbol}: ${input.riskLevel} risk.`;
   const link = `Report: ${input.reportUrl}`;
-  const ranked = [...input.facts].sort((a, b) => SIGNAL_RANK[b.signal] - SIGNAL_RANK[a.signal]);
+  const ranked = [...input.facts].sort((a, b) => {
+    const bySignal = SIGNAL_RANK[b.signal] - SIGNAL_RANK[a.signal];
+    if (bySignal !== 0) return bySignal;
+    if (a.id === "claims") return -1;
+    if (b.id === "claims") return 1;
+    return 0;
+  });
   const shorts = ranked.map((fact) => fact.short.trim()).filter(Boolean);
   const chosen: string[] = [];
   for (const short of shorts) {
@@ -53,7 +59,7 @@ export function enforceReplyPolicy(
   if (/\bscam\b/i.test(text)) return { ok: false, text, reason: "scam" };
 
   const levels = text.match(/\b(LOW|MEDIUM|HIGH)\b/g) ?? [];
-  if (!levels.includes(input.riskLevel) || levels.some((level) => level !== input.riskLevel)) {
+  if (!levels.some((level) => level === input.riskLevel) || levels.some((level) => level !== input.riskLevel)) {
     return { ok: false, text, reason: "risk level" };
   }
 

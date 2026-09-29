@@ -41,7 +41,7 @@ The app is http://127.0.0.1:3847. `npm run demo` forces mock mode. Do not point 
 
 ## Conventions
 
-- TypeScript, ESM, `.js` specifiers in `packages/core` imports so Node and Vitest resolve the TypeScript source.
+- TypeScript, ESM, `.js` specifiers in `packages/core` and `packages/db` imports so Node, tsx, and Vitest resolve the TypeScript source. Next resolves those via `extensionAlias` in `apps/web/next.config.ts`. Do not remove it.
 - npm workspaces. Packages are `@lens/core`, `@lens/db`, `@lens/web`, `@lens/worker`.
 - Two-space indent, double quotes, no lorem, no “welcome to your app”.
 - shadcn-style primitives live in `apps/web/components/ui`. Add new ones with the same `cva` pattern. `components.json` is set up for the shadcn CLI.
