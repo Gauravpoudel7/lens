@@ -45,6 +45,10 @@ export function createLiveXClient(): XClient {
       const result = await client.v2.tweet(text);
       return { id: result.data.id };
     },
+    async sendDm({ recipientId, text }) {
+      const result = await client.v2.sendDmToParticipant(recipientId, { text });
+      return { id: result.dm_event_id };
+    },
   };
 }
 

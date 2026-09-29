@@ -1,3 +1,4 @@
+import type { AlertRecord, PaymentRecord, UserRecord, WatchRecord } from "../accounts.js";
 import type { CheckRecord, MentionRecord, OutcomeRecord } from "../types.js";
 
 export interface LensStore {
@@ -39,4 +40,40 @@ export interface LensStore {
 
   getCursor(id: string): Promise<string | null>;
   setCursor(id: string, sinceId: string): Promise<void>;
+
+  upsertUser(input: {
+    xUserId?: string | null;
+    xHandle?: string | null;
+    wallet?: string | null;
+  }): Promise<UserRecord>;
+  findUser(query: {
+    xUserId?: string | null;
+    xHandle?: string | null;
+    wallet?: string | null;
+  }): Promise<UserRecord | null>;
+  getUser(id: string): Promise<UserRecord | null>;
+  setProUntil(userId: string, proUntilIso: string): Promise<UserRecord>;
+
+  listWatches(userId: string): Promise<WatchRecord[]>;
+  addWatch(userId: string, mint: string, symbol: string): Promise<WatchRecord>;
+  removeWatch(userId: string, mint: string): Promise<void>;
+  listProWatchers(mint: string, now: Date): Promise<UserRecord[]>;
+
+  savePayment(payment: PaymentRecord): Promise<void>;
+  getPaymentByReference(reference: string): Promise<PaymentRecord | null>;
+  updatePayment(
+    id: string,
+    patch: Partial<Pick<PaymentRecord, "status" | "signature">>,
+  ): Promise<void>;
+
+  saveAlert(alert: AlertRecord): Promise<void>;
+  hasAlert(userId: string, checkId: string): Promise<boolean>;
+  listAlertsByStatus(status: AlertRecord["status"]): Promise<AlertRecord[]>;
+  updateAlert(
+    id: string,
+    patch: Partial<Pick<AlertRecord, "status" | "xMessageId">>,
+  ): Promise<void>;
+
+  getOutboundCount(day: string): Promise<number>;
+  incrementOutboundCount(day: string): Promise<number>;
 }

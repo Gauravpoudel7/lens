@@ -1,0 +1,11 @@
+node_modules
+.next
+data
+.git
+uploads
+prisma/.generated
+*.log
+.env
+.env.local
+coverage
+tmp-scaffold

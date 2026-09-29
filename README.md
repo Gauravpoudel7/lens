@@ -29,26 +29,32 @@ npm test
 | Command | What it does |
 | --- | --- |
 | `npm run demo` | One simulated mention, end to end, in mock mode |
+| `npm run setup:devnet` | Create `data/devnet-keypair.json` if needed and request devnet SOL |
+| `npm run demo:devnet` | Same loop as the demo, but the memo is a real devnet transaction |
 | `npm run dev` | Scorecard and HTTP API on port 3847 |
-| `npm run worker` | Poll mentions and score due checks. Mock X returns nothing unless you seed it |
+| `npm run worker` | Poll mentions, run the outbound job, score due checks |
 | `npm run worker:once` | Single poll |
 | `npm run post -- --mint <address>` | Outbound post. HIGH becomes a warning, LOW a call, otherwise a note |
+| `npm run discover` | One outbound pass. No-op unless `OUTBOUND_ENABLED=true` |
+| `npm run live:sample` | Read BONK and one current pump.fun token from mainnet |
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
-| `npm test` | Risk rules, proof hash/verify, resolver, pipeline |
-| `npm run db:push` | Create or update the SQLite schema |
+| `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
+| `npm run db:push` | Create or update the database. Postgres when `DATABASE_URL` starts with `postgres` |
 
 The manual check form is at [http://127.0.0.1:3847/check](http://127.0.0.1:3847/check). The three buttons fill in mock fixtures (`$DANGER`, `$SAFE`, `$MID`).
 
 ## Layout
 
 ```
-packages/core    rules, resolver, reply writer, proof, providers, pipeline
+packages/core    rules, resolver, reply writer, proof, providers, Pro, discovery
 packages/db      Prisma store and runtime wiring
-apps/web         Next.js scorecard, check API, verify API, Blink
-apps/worker      mention poller and the live X client
-prisma/          SQLite schema
-scripts/demo.ts  the one-command mock loop
+apps/web         Next.js scorecard, check API, verify API, Pro page, Blink
+apps/worker      mention poller, outbound job, live X client
+prisma/          schema (SQLite by default; Postgres is generated at startup)
+scripts/         demo, devnet proof, discovery, live sample
+docs/KEYS.md     where each key comes from
+DEPLOY.md        Railway, Fly, and Render
 ```
 
 Future agents should read [AGENTS.md](AGENTS.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/STATUS.md](docs/STATUS.md) before changing behavior.
@@ -61,7 +67,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | `data/lens.db` | SQLite file |
+| `DATABASE_URL` | `data/lens.db` | SQLite file, or a `postgresql://` URL |
 | `DATA_MODE` | `mock` | `live` uses DexScreener, Solana RPC, RugCheck, optional Birdeye |
 | `PROOF_MODE` | `mock` | `solana` sends a memo before posting |
 | `X_MODE` | `mock` | `live` polls and posts with the X API |
@@ -84,8 +90,16 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `SHARP_DROP_PCT` | `-30` | HIGH is right if price change is at or below this |
 | `CALL_WIN_PCT` | `20` | A call wins at or above this |
 | `POLL_INTERVAL_MS` | `60000` | Worker poll |
-| `OUTBOUND_ENABLED` | `false` | Watchlist poster |
-| `OUTBOUND_MINTS` | empty | Comma-separated mints |
+| `RPC_RETRY_ATTEMPTS` | `4` | Retries for HTTP 429 and dropped RPC calls |
+| `OUTBOUND_ENABLED` | `false` | Scheduled calls and warnings |
+| `OUTBOUND_MINTS` | empty | Comma-separated mints to always consider |
+| `OUTBOUND_DISCOVER` | `false` | Also read DexScreener profiles and boosts |
+| `OUTBOUND_DAILY_CAP` | `8` | Calls plus warnings posted per UTC day |
+| `PRO_TREASURY_WALLET` | empty | Wallet that receives Pro USDC |
+| `PRO_PRICE_USDC` | `10` | Price for one Pro period |
+| `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |
+| `USDC_MINT` | mainnet USDC | Override only for a devnet payment test |
+| `PRO_RPC_URL` | same as `DATA_RPC_URL` | Mainnet RPC used to verify the USDC transfer |
 | `JUPITER_BASE_URL` | `https://lite-api.jup.ag` | Quote and swap |
 | `JUPITER_FEE_BPS` | `50` | 0.5%, applied only when a fee account is set |
 | `JUPITER_FEE_ACCOUNT` | empty | Jupiter referral/fee token account |
@@ -95,7 +109,8 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 - **Solana RPC (Helius or any mainnet URL)** for mint authority, freeze authority, supply, and top holders. Public mainnet RPC works until it rate-limits you.
 - **No key** for DexScreener, RugCheck, or Jupiter lite quotes.
 - **Birdeye** only if you want their security payload (creator sold percent, when the API returns it).
-- **A devnet keypair with SOL** for on-chain proofs. Generate one and fund it from a devnet faucet. Point `SOLANA_KEYPAIR_PATH` at the JSON array file (kept under `data/`, which is gitignored) and set `PROOF_MODE=solana`.
+- **A devnet keypair with SOL** for on-chain proofs. Run `npm run setup:devnet`. The JSON array stays in `data/`, which is gitignored. Set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`. Then `npm run demo:devnet`.
+- **`PRO_TREASURY_WALLET`** if you want the Pro page to create a Solana Pay link. No card processor is wired up. The card rail is an interface that returns “not configured”.
 - **X API user-context tokens** (key, secret, access token, access secret) and `X_MODE=live` to actually read mentions and post.
 - **An OpenAI-compatible key** if you want the model to phrase replies. Without it, the template writer is used. The model never chooses the risk level.
 
@@ -125,7 +140,11 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 
 ## HTTP API
 
-- `POST /api/check` `{ "input": "<mint, ticker, or post text>" }`
+- `POST /api/check` `{ "input": "<mint, ticker, or post text>", "wallet"?: "<pro wallet>" }`
+- `POST /api/pro/checkout` `{ "xHandle"?, "wallet"? }` returns a Solana Pay URL
+- `POST /api/pro/confirm` `{ "reference" }` checks the USDC transfer and flips Pro
+- `GET /api/pro/account?handle=&wallet=`
+- `POST /api/pro/watch` `{ "xHandle"?, "wallet"?, "mint" }` and `DELETE` with the same fields
 - `GET /api/calls`
 - `GET /api/calls/:id`
 - `GET /api/stats`
@@ -133,7 +152,15 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 - `GET /api/actions/trade/:mint` Solana Action. HIGH risk returns a warning and no buy. Other levels return Jupiter buy actions when `DATA_MODE=live`.
 - `POST /api/actions/trade/:mint?amount=0.1` with `{ "account": "<wallet>" }`
 - `GET /actions.json`
-- `GET /api/health`
+- `GET /api/health` returns `ok`, modes, and `db`
+
+How to obtain each key is in [docs/KEYS.md](docs/KEYS.md). How to run the Docker image on Railway, Fly, or Render is in [DEPLOY.md](DEPLOY.md).
+
+## Pro
+
+Free X accounts get `RATE_LIMIT_PER_USER_PER_DAY` replies (default 5). An account is Pro after a USDC transfer to `PRO_TREASURY_WALLET` includes that checkout's Solana Pay reference and at least the configured amount. Pro mentions skip the daily cap. Pro watchlist members get a DM when a checked mint is HIGH. The DM points at the report that was already proved. The risk engine does not look at who paid.
+
+The public check form stays on an hourly IP limit. Sending the paying wallet with the form skips that limit. The wallet address is not a login. Anyone who knows a paying wallet can use it on the form. The X cap uses the author of the mention.
 
 ## Scoring
 

@@ -5,6 +5,7 @@ export class MockXClient implements XClient {
   mentions: XPost[] = [];
   posts = new Map<string, XPost>();
   replies: Array<{ id: string; inReplyToId: string; text: string }> = [];
+  dms: Array<{ id: string; recipientId: string; text: string }> = [];
   timeline: XPost[] = [];
 
   seed(post: XPost): void {
@@ -41,6 +42,12 @@ export class MockXClient implements XClient {
     };
     this.timeline.push(post);
     this.posts.set(id, post);
+    return { id };
+  }
+
+  async sendDm(input: { recipientId: string; text: string }): Promise<{ id: string }> {
+    const id = `dm_${newId(12)}`;
+    this.dms.push({ id, ...input });
     return { id };
   }
 }

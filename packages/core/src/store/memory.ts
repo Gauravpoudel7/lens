@@ -1,3 +1,5 @@
+import { newId } from "../ids.js";
+import { isActivePro, normalizeHandle, type AlertRecord, type PaymentRecord, type UserRecord, type WatchRecord } from "../accounts.js";
 import type { CheckRecord, MentionRecord, OutcomeRecord } from "../types.js";
 import type { LensStore } from "./types.js";
 
@@ -12,6 +14,11 @@ export class MemoryStore implements LensStore {
   usage = new Map<string, number>();
   memos = new Map<string, { payload: string; cluster: string }>();
   cursors = new Map<string, string>();
+  users = new Map<string, UserRecord>();
+  watches = new Map<string, WatchRecord>();
+  payments = new Map<string, PaymentRecord>();
+  alerts = new Map<string, AlertRecord>();
+  outbound = new Map<string, number>();
 
   async getMention(id: string): Promise<MentionRecord | null> {
     const mention = this.mentions.get(id);
@@ -149,5 +156,147 @@ export class MemoryStore implements LensStore {
 
   async setCursor(id: string, sinceId: string): Promise<void> {
     this.cursors.set(id, sinceId);
+  }
+
+  async upsertUser(input: {
+    xUserId?: string | null;
+    xHandle?: string | null;
+    wallet?: string | null;
+  }): Promise<UserRecord> {
+    const xUserId = input.xUserId?.trim() || null;
+    const xHandle = input.xHandle ? normalizeHandle(input.xHandle) : null;
+    const wallet = input.wallet?.trim() || null;
+    const existing =
+      (xUserId ? [...this.users.values()].find((user) => user.xUserId === xUserId) : undefined) ??
+      (xHandle ? [...this.users.values()].find((user) => user.xHandle === xHandle) : undefined) ??
+      (wallet ? [...this.users.values()].find((user) => user.wallet === wallet) : undefined);
+    const next: UserRecord = existing
+      ? {
+          ...existing,
+          xUserId: xUserId ?? existing.xUserId,
+          xHandle: xHandle ?? existing.xHandle,
+          wallet: wallet ?? existing.wallet,
+        }
+      : {
+          id: newId(),
+          xUserId,
+          xHandle,
+          wallet,
+          tier: "free",
+          proUntil: null,
+          createdAt: new Date().toISOString(),
+        };
+    this.users.set(next.id, next);
+    return clone(next);
+  }
+
+  async findUser(query: {
+    xUserId?: string | null;
+    xHandle?: string | null;
+    wallet?: string | null;
+  }): Promise<UserRecord | null> {
+    const xUserId = query.xUserId?.trim() || null;
+    const xHandle = query.xHandle ? normalizeHandle(query.xHandle) : null;
+    const wallet = query.wallet?.trim() || null;
+    const found =
+      (xUserId ? [...this.users.values()].find((user) => user.xUserId === xUserId) : undefined) ??
+      (xHandle ? [...this.users.values()].find((user) => user.xHandle === xHandle) : undefined) ??
+      (wallet ? [...this.users.values()].find((user) => user.wallet === wallet) : undefined);
+    return found ? clone(found) : null;
+  }
+
+  async getUser(id: string): Promise<UserRecord | null> {
+    const user = this.users.get(id);
+    return user ? clone(user) : null;
+  }
+
+  async setProUntil(userId: string, proUntilIso: string): Promise<UserRecord> {
+    const current = this.users.get(userId);
+    if (!current) throw new Error(`Unknown user ${userId}`);
+    const next = { ...current, tier: "pro" as const, proUntil: proUntilIso };
+    this.users.set(userId, next);
+    return clone(next);
+  }
+
+  async listWatches(userId: string): Promise<WatchRecord[]> {
+    return [...this.watches.values()].filter((watch) => watch.userId === userId).map(clone);
+  }
+
+  async addWatch(userId: string, mint: string, symbol: string): Promise<WatchRecord> {
+    const existing = [...this.watches.values()].find((watch) => watch.userId === userId && watch.mint === mint);
+    if (existing) return clone(existing);
+    const watch: WatchRecord = {
+      id: newId(),
+      userId,
+      mint,
+      symbol,
+      createdAt: new Date().toISOString(),
+    };
+    this.watches.set(watch.id, watch);
+    return clone(watch);
+  }
+
+  async removeWatch(userId: string, mint: string): Promise<void> {
+    for (const [id, watch] of this.watches) {
+      if (watch.userId === userId && watch.mint === mint) this.watches.delete(id);
+    }
+  }
+
+  async listProWatchers(mint: string, now: Date): Promise<UserRecord[]> {
+    const userIds = new Set(
+      [...this.watches.values()].filter((watch) => watch.mint === mint).map((watch) => watch.userId),
+    );
+    return [...this.users.values()]
+      .filter((user) => userIds.has(user.id) && isActivePro(user, now))
+      .map(clone);
+  }
+
+  async savePayment(payment: PaymentRecord): Promise<void> {
+    this.payments.set(payment.id, clone(payment));
+  }
+
+  async getPaymentByReference(reference: string): Promise<PaymentRecord | null> {
+    const found = [...this.payments.values()].find((payment) => payment.reference === reference);
+    return found ? clone(found) : null;
+  }
+
+  async updatePayment(
+    id: string,
+    patch: Partial<Pick<PaymentRecord, "status" | "signature">>,
+  ): Promise<void> {
+    const current = this.payments.get(id);
+    if (!current) throw new Error(`Unknown payment ${id}`);
+    this.payments.set(id, { ...current, ...patch });
+  }
+
+  async saveAlert(alert: AlertRecord): Promise<void> {
+    this.alerts.set(alert.id, clone(alert));
+  }
+
+  async hasAlert(userId: string, checkId: string): Promise<boolean> {
+    return [...this.alerts.values()].some((alert) => alert.userId === userId && alert.checkId === checkId);
+  }
+
+  async listAlertsByStatus(status: AlertRecord["status"]): Promise<AlertRecord[]> {
+    return [...this.alerts.values()].filter((alert) => alert.status === status).map(clone);
+  }
+
+  async updateAlert(
+    id: string,
+    patch: Partial<Pick<AlertRecord, "status" | "xMessageId">>,
+  ): Promise<void> {
+    const current = this.alerts.get(id);
+    if (!current) throw new Error(`Unknown alert ${id}`);
+    this.alerts.set(id, { ...current, ...patch });
+  }
+
+  async getOutboundCount(day: string): Promise<number> {
+    return this.outbound.get(day) ?? 0;
+  }
+
+  async incrementOutboundCount(day: string): Promise<number> {
+    const next = (this.outbound.get(day) ?? 0) + 1;
+    this.outbound.set(day, next);
+    return next;
   }
 }

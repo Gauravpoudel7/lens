@@ -1,4 +1,7 @@
+import { isActivePro } from "./accounts.js";
+import { queueWarningAlerts } from "./alerts.js";
 import { claimsFromPosts } from "./claims.js";
+import { listDexCandidates, type TokenCandidate } from "./discover.js";
 import { errorMessage, log, newId, utcDay } from "./ids.js";
 import { evaluateRisk, levelSummary, snapshotToRuleInput } from "./risk/engine.js";
 import { assertSafeNotice, UNRESOLVED_REPLY } from "./reply/policy.js";
@@ -68,14 +71,18 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
   }
 
   try {
-    const day = utcDay(new Date());
-    const used = await deps.store.getDailyCount(incoming.authorId, day);
-    if (used >= deps.config.rateLimitPerUserPerDay) {
-      await deps.store.updateMention(incoming.id, {
-        status: "rate_limited",
-        skipReason: "daily limit",
-      });
-      return { status: "rate_limited", checkId: null };
+    await linkMentionAuthor(deps, incoming.authorId, incoming.authorUsername);
+    const pro = await authorIsPro(deps, incoming.authorId, incoming.authorUsername);
+    if (!pro) {
+      const day = utcDay(new Date());
+      const used = await deps.store.getDailyCount(incoming.authorId, day);
+      if (used >= deps.config.rateLimitPerUserPerDay) {
+        await deps.store.updateMention(incoming.id, {
+          status: "rate_limited",
+          skipReason: "daily limit",
+        });
+        return { status: "rate_limited", checkId: null };
+      }
     }
 
     let parentText = incoming.parentText ?? null;
@@ -162,7 +169,10 @@ async function finishReply(
     });
     if (!cached) await deps.store.updateCheck(check.id, { xPostId: posted.id });
     await deps.store.updateMention(incoming.id, { status: "replied", checkId: check.id });
-    await deps.store.incrementDailyCount(incoming.authorId, utcDay(new Date()));
+    if (!(await authorIsPro(deps, incoming.authorId, incoming.authorUsername))) {
+      await deps.store.incrementDailyCount(incoming.authorId, utcDay(new Date()));
+    }
+    await queueWarningAlerts(deps, check);
     log(`${cached ? "cached reply" : "replied"} ${check.tokenSymbol} ${check.riskLevel} ${check.id}`);
     return {
       status: "replied",
@@ -276,6 +286,7 @@ export async function publishOutbound(deps: LensDeps, mint: string, now?: Date):
     const posted = await deps.x.post(created.check.replyText);
     await deps.store.updateCheck(created.check.id, { xPostId: posted.id });
     created.check.xPostId = posted.id;
+    await queueWarningAlerts(deps, created.check);
     return { ok: true, check: created.check };
   } catch (err) {
     const detail = errorMessage(err);
@@ -400,19 +411,97 @@ function proofRecord(
   };
 }
 
+const RECENT_MS = 20 * 3_600_000;
+
 export async function postWatchlist(deps: LensDeps, now = new Date()): Promise<number> {
-  if (!deps.config.outboundEnabled || deps.config.outboundMints.length === 0) return 0;
+  const result = await runOutboundCycle(deps, { now, discover: false });
+  return result.posted;
+}
+
+export async function runOutboundCycle(
+  deps: LensDeps,
+  opts?: { now?: Date; candidates?: TokenCandidate[]; discover?: boolean },
+): Promise<{ posted: number; skipped: number; considered: number }> {
+  if (!deps.config.outboundEnabled) return { posted: 0, skipped: 0, considered: 0 };
+  const now = opts?.now ?? new Date();
+  const day = utcDay(now);
+  const cap = deps.config.outboundDailyCap;
   let posted = 0;
-  for (const mint of deps.config.outboundMints) {
-    const recent = await deps.store.latestCheckForMint(mint, 20 * 3_600_000, now);
+  let skipped = 0;
+  let considered = 0;
+
+  const room = async () => cap - (await deps.store.getOutboundCount(day));
+
+  const tryMint = async (mint: string, discovered: boolean): Promise<"posted" | "capped" | "skipped"> => {
+    if ((await room()) <= 0) return "capped";
+    const recent = await deps.store.latestCheckForMint(mint, RECENT_MS, now);
     if (recent && (recent.kind === "call" || recent.kind === "warning" || recent.kind === "note")) {
-      continue;
+      return "skipped";
+    }
+    if (discovered) {
+      const snapshot = await deps.provider.getToken(mint);
+      if (!snapshot) return "skipped";
+      const report = evaluateRisk(
+        snapshotToRuleInput(snapshot, { burned: false, locked: false }, now),
+        snapshot.links,
+      );
+      if (report.level !== "HIGH" && report.level !== "LOW") return "skipped";
     }
     const result = await publishOutbound(deps, mint, now);
-    if (result.ok) posted += 1;
-    else log(`outbound skipped ${mint}`, result.error);
+    if (!result.ok) {
+      log("outbound skipped", { mint, error: result.error });
+      return "skipped";
+    }
+    await deps.store.incrementOutboundCount(day);
+    posted += 1;
+    return "posted";
+  };
+
+  for (const mint of deps.config.outboundMints) {
+    considered += 1;
+    const outcome = await tryMint(mint, false);
+    if (outcome === "capped") break;
+    if (outcome === "skipped") skipped += 1;
   }
-  return posted;
+
+  const discover = opts?.discover ?? deps.config.outboundDiscover;
+  let candidates = opts?.candidates;
+  if (!candidates && discover) {
+    try {
+      candidates = await listDexCandidates();
+    } catch (err) {
+      log("discovery failed", errorMessage(err));
+      candidates = [];
+    }
+  }
+  const configured = new Set(deps.config.outboundMints);
+  for (const candidate of candidates ?? []) {
+    if (configured.has(candidate.mint)) continue;
+    if ((await room()) <= 0) break;
+    considered += 1;
+    const outcome = await tryMint(candidate.mint, true);
+    if (outcome === "capped") break;
+    if (outcome === "skipped") skipped += 1;
+  }
+
+  return { posted, skipped, considered };
+}
+
+async function authorIsPro(deps: LensDeps, authorId: string, authorUsername: string): Promise<boolean> {
+  const byId = await deps.store.findUser({ xUserId: authorId });
+  const user = byId ?? (await deps.store.findUser({ xHandle: authorUsername }));
+  return isActivePro(user);
+}
+
+async function linkMentionAuthor(deps: LensDeps, authorId: string, authorUsername: string): Promise<void> {
+  const existing = await deps.store.findUser({ xHandle: authorUsername });
+  if (!existing) return;
+  if (existing.xUserId === authorId) return;
+  await deps.store.upsertUser({
+    xHandle: existing.xHandle,
+    xUserId: authorId,
+    wallet: existing.wallet,
+  });
 }
 
 export { levelSummary };

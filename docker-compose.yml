@@ -1,0 +1,63 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3847:3847"
+    environment:
+      LENS_ROLE: web
+      PORT: "3847"
+      DATABASE_URL: file:/app/data/lens.db
+      PUBLIC_BASE_URL: http://127.0.0.1:3847
+      DATA_MODE: ${DATA_MODE:-mock}
+      PROOF_MODE: ${PROOF_MODE:-mock}
+      X_MODE: ${X_MODE:-mock}
+      SOLANA_CLUSTER: ${SOLANA_CLUSTER:-devnet}
+    volumes:
+      - lens-data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3847/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    build: .
+    environment:
+      LENS_ROLE: worker
+      DATABASE_URL: file:/app/data/lens.db
+      PUBLIC_BASE_URL: http://127.0.0.1:3847
+      DATA_MODE: ${DATA_MODE:-mock}
+      PROOF_MODE: ${PROOF_MODE:-mock}
+      X_MODE: ${X_MODE:-mock}
+      SOLANA_CLUSTER: ${SOLANA_CLUSTER:-devnet}
+      OUTBOUND_ENABLED: ${OUTBOUND_ENABLED:-false}
+      OUTBOUND_DISCOVER: ${OUTBOUND_DISCOVER:-false}
+      OUTBOUND_DAILY_CAP: ${OUTBOUND_DAILY_CAP:-8}
+    volumes:
+      - lens-data:/app/data
+    depends_on:
+      web:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: lens
+      POSTGRES_PASSWORD: lens
+      POSTGRES_DB: lens
+    ports:
+      - "5432:5432"
+    volumes:
+      - lens-pg:/var/lib/postgresql/data
+
+volumes:
+  lens-data:
+  lens-pg:

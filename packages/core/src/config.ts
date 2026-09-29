@@ -1,5 +1,8 @@
 import type { LensConfig } from "./types.js";
 
+export const USDC_MINT_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const USDC_MINT_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
 function num(value: string | undefined, fallback: number): number {
   if (value == null || value.trim() === "") return fallback;
   const parsed = Number(value);
@@ -58,6 +61,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),
+    outboundDailyCap: Math.max(0, Math.floor(num(env.OUTBOUND_DAILY_CAP, 8))),
+    outboundDiscover: env.OUTBOUND_DISCOVER === "true",
     checkApiLimitPerHour: num(env.CHECK_API_LIMIT_PER_HOUR, 30),
+    rpcRetryAttempts: Math.max(1, Math.floor(num(env.RPC_RETRY_ATTEMPTS, 4))),
+    proPriceUsdc: num(env.PRO_PRICE_USDC, 10),
+    proPeriodDays: Math.max(1, Math.floor(num(env.PRO_PERIOD_DAYS, 30))),
+    proTreasury: clean(env.PRO_TREASURY_WALLET),
+    proRpcUrl: clean(env.PRO_RPC_URL) ?? dataRpcUrl,
+    usdcMint: clean(env.USDC_MINT) ?? USDC_MINT_MAINNET,
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
+import { utcDay } from "./ids.js";
 import { FIXTURES } from "./providers/mock.js";
 import { MockTokenDataProvider } from "./providers/mock.js";
 import { createReplyWriter } from "./reply/writer.js";
@@ -139,6 +140,28 @@ describe("mention pipeline", () => {
     expect(limited.status).toBe("rate_limited");
     expect([...store.checks.values()]).toHaveLength(1);
     expect(x.replies).toHaveLength(1);
+  });
+
+  it("lets a Pro account keep asking after the free daily cap", async () => {
+    const { rt, x } = deps(1);
+    const user = await rt.store.upsertUser({ xHandle: "trader_joe", wallet: "wallet" });
+    await rt.store.setProUntil(user.id, "2099-01-01T00:00:00.000Z");
+    const first = await processMention(rt, {
+      id: "mention_1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: `@askLens ${FIXTURES.danger.mint}`,
+    });
+    const second = await processMention(rt, {
+      id: "mention_2",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: `@askLens ${FIXTURES.safe.mint}`,
+    });
+    expect(first.status).toBe("replied");
+    expect(second.status).toBe("replied");
+    expect(x.replies).toHaveLength(2);
+    expect(await rt.store.getDailyCount("user_1", utcDay(new Date()))).toBe(0);
   });
 
   it("scores a proved call after the window", async () => {

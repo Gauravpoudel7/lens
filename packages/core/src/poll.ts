@@ -1,6 +1,7 @@
 import { log } from "./ids.js";
+import { flushQueuedAlerts } from "./alerts.js";
 import { scoreDueChecks } from "./outcomes.js";
-import { postWatchlist, processMention, type LensDeps } from "./pipeline.js";
+import { processMention, runOutboundCycle, type LensDeps } from "./pipeline.js";
 import { compareIds } from "./x/mock.js";
 
 export async function pollOnce(deps: LensDeps): Promise<{ seen: number; replied: number; scored: number }> {
@@ -24,8 +25,11 @@ export async function pollOnce(deps: LensDeps): Promise<{ seen: number; replied:
     }
     await deps.store.setCursor("mentions", post.id);
   }
-  const outbound = await postWatchlist(deps);
-  if (outbound > 0) log(`posted ${outbound} outbound update${outbound === 1 ? "" : "s"}`);
+  const outbound = await runOutboundCycle(deps);
+  if (outbound.posted > 0) {
+    log("posted outbound updates", { posted: outbound.posted, considered: outbound.considered });
+  }
+  await flushQueuedAlerts(deps);
   const scored = await scoreDueChecks(deps);
   return { seen: ordered.length, replied, scored };
 }

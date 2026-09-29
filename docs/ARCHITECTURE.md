@@ -13,9 +13,12 @@ The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no 
 | Risk engine | `packages/core/src/risk/engine.ts` | Pure function. No network, no model. |
 | Reply writer | `packages/core/src/reply` | Template, or an OpenAI-compatible chat call. `enforceReplyPolicy` runs on both. |
 | Proof publisher | `packages/core/src/proof` | Hash, memo payload, mock store, Solana memo transaction, verify. |
-| X client | `packages/core/src/x` and `apps/worker/src/x-live.ts` | `XClient` interface. Mock is the default. Live uses `twitter-api-v2` and is constructed only by the worker. |
-| Store | `packages/core/src/store/types.ts`, Prisma in `packages/db` | Mentions, checks, proofs, outcomes, rate-limit counters, mock memos, poll cursor. |
-| Pipeline | `packages/core/src/pipeline.ts` | Mention handling, manual checks, outbound posts. |
+| X client | `packages/core/src/x` and `apps/worker/src/x-live.ts` | `XClient` interface, including `sendDm`. Mock is the default. Live uses `twitter-api-v2` and is constructed only by the worker. |
+| Store | `packages/core/src/store/types.ts`, Prisma in `packages/db` | Mentions, checks, proofs, outcomes, accounts, watches, payments, alerts, outbound cap, mock memos, poll cursor. |
+| Pipeline | `packages/core/src/pipeline.ts` | Mention handling, manual checks, outbound posts, daily cap. |
+| Pro billing | `packages/core/src/billing` | Solana Pay reference transfer. `PaymentRail` is the seam for a future card provider. |
+| Alerts | `packages/core/src/alerts.ts` | DM Pro watchers when a check is HIGH. |
+| Discovery | `packages/core/src/discover.ts` | DexScreener token profiles and boosts. |
 | Outcome job | `packages/core/src/outcomes.ts` | Price change after N days. |
 | Scorecard | `apps/web` | Server-rendered record, report page, check form, verify form. |
 | Blink | `packages/core/src/blink.ts` and `apps/web/app/api/actions/trade/[mint]` | Solana Action. Jupiter swap builder is separate. |
@@ -29,11 +32,13 @@ flowchart TD
   provider --> rules[Risk engine]
   rules --> writer[Reply writer]
   writer --> proof[Proof publisher]
-  proof --> db[(SQLite)]
+  proof --> db[(SQLite or Postgres)]
   proof --> x[X reply or outbound post]
   db --> scorecard[Scorecard and report]
   job[Outcome job] --> provider
   job --> db
+  discover[DexScreener candidates] --> rules
+  pay[USDC reference transfer] --> db
   blink[Blink GET or POST] --> db
   blink --> jupiter[Jupiter when DATA_MODE=live]
 ```
@@ -61,7 +66,7 @@ Outbound posts (`publishOutbound`, `npm run post`) use kind `auto`: HIGH becomes
 
 ## Data model
 
-SQLite via Prisma (`prisma/schema.prisma`).
+Prisma (`prisma/schema.prisma`). The default provider is SQLite. A `postgresql://` URL uses a generated copy of the same models.
 
 - **Mention** — one X post that tagged the bot, plus status and the check it produced.
 - **Check** — the risk record: kind, mint, level, facts JSON, snapshot JSON, reply text, price at check time, data mode (`mock` or `live`).
@@ -71,6 +76,11 @@ SQLite via Prisma (`prisma/schema.prisma`).
 - **UsageDay** — `user + UTC day` counter.
 - **ChainMemo** — payload for mock signatures, so the web process can verify what the demo wrote.
 - **BotCursor** — last mention id the poller handled.
+- **Account** — X handle, X user id, and/or wallet. `proUntil` is the paid period. Table name is `accounts` so Postgres does not collide with `USER`.
+- **Watch** — mint on an account's watchlist.
+- **Payment** — pending or paid USDC checkout, including the Solana Pay reference.
+- **Alert** — DM text for one user and one check. `queued` until an X user id exists, then `sent` or `failed`.
+- **OutboundDay** — how many calls and warnings were posted that UTC day.
 
 `MemoryStore` implements the same interface for tests.
 
@@ -121,9 +131,15 @@ Token data is mainnet. Proofs are whichever cluster `SOLANA_CLUSTER` selects. Th
 
 ## X bot
 
-`pollOnce` lists mentions after the stored cursor, oldest first, runs `processMention`, then advances the cursor even if one mention fails, so a single bad tweet cannot block the queue. It then runs the optional outbound watchlist and the outcome job.
+`pollOnce` lists mentions after the stored cursor, oldest first, runs `processMention`, then advances the cursor even if one mention fails, so a single bad tweet cannot block the queue. It then runs `runOutboundCycle`, flushes queued DMs, and the outcome job.
 
-The live client needs OAuth 1.0a user tokens. App-only bearer auth cannot post a reply. The web app does not construct the live client. Manual checks never post to X.
+Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUntil` is in the future. Pro is set only by `confirmUsdcCheckout` after a matching USDC balance increase on the treasury, with the checkout reference present in the transaction account keys. The counter is not incremented for Pro.
+
+`runOutboundCycle` does nothing unless `OUTBOUND_ENABLED=true`. It posts configured mints first, then DexScreener candidates when `OUTBOUND_DISCOVER=true`. Discovered MEDIUM tokens are not posted. Each successful post counts toward `OUTBOUND_DAILY_CAP`. A mint with a call, warning, or note in the last 20 hours is skipped.
+
+The live client needs OAuth 1.0a user tokens. App-only bearer auth cannot post a reply or a DM. The web app does not construct the live client. Manual checks never post to X. Live DMs call `v2.sendDmToParticipant` and fail closed if X rejects them. Tests use `MockXClient.dms`.
+
+HTTP 429 and dropped connections retry with exponential backoff (`withRetry`, default 4 attempts). If `getTokenLargestAccounts` still fails, the mint and freeze authorities from `getAccountInfo` are kept and holder stats fall through to RugCheck.
 
 ## Blink
 
@@ -148,7 +164,7 @@ Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. PO
 
 ## Decisions
 
-- **SQLite, not Postgres**, so `npm run demo` needs no extra service. The store interface is the seam if Postgres is added later. Prisma can point `DATABASE_URL` at Postgres only after the datasource provider changes. It is still SQLite today.
+- **SQLite by default, Postgres when `DATABASE_URL` starts with `postgres`.** `scripts/prepare-schema.mjs` copies the schema with `provider = "postgresql"` and the entrypoint generates the client. Local demo stays on the SQLite file. Do not commit `prisma/.generated`.
 - **Memo program, not Anchor.** The requirement is a public hash and time. A memo is one instruction, easy to verify from any explorer, and does not need a deployed program id. An Anchor program would help if we later wanted indexed accounts or a fee. It is not needed to prove a string.
 - **Rules before the model.** The PRD calls out prompt-injection against the reply bot. The model never sees a tool and its text is rejected if the level changes.
 - **Devnet proofs, mainnet facts.** Writing memos on mainnet costs real SOL and is the wrong default for a hackathon wallet. Reading devnet token data would score fake mints. The split is explicit in config.
@@ -158,4 +174,4 @@ Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. PO
 
 ## What is intentionally out
 
-Pro alerts, paid plans, browser extension, influencer scores, and trading user funds. See `docs/STATUS.md`.
+Browser extension, influencer scores, and trading user funds. Card checkout is an interface only. See `docs/STATUS.md`.

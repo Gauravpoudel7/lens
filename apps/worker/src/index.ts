@@ -1,4 +1,4 @@
-import { pollOnce } from "@lens/core";
+import { log, logError, pollOnce } from "@lens/core";
 import { bootstrapEnv, createRuntime } from "@lens/db";
 import { createLiveXClient } from "./x-live.js";
 
@@ -10,9 +10,14 @@ const once = process.argv.includes("--once");
 
 async function tick(): Promise<void> {
   const result = await pollOnce(runtime);
-  console.log(
-    `[lens] poll seen=${result.seen} replied=${result.replied} scored=${result.scored} data=${runtime.config.dataMode} proof=${runtime.config.proofMode} x=${live ? "live" : "mock"}`,
-  );
+  log("poll finished", {
+    seen: result.seen,
+    replied: result.replied,
+    scored: result.scored,
+    dataMode: runtime.config.dataMode,
+    proofMode: runtime.config.proofMode,
+    xMode: live ? "live" : "mock",
+  });
 }
 
 if (once) {
@@ -23,6 +28,6 @@ if (once) {
 await tick();
 setInterval(() => {
   tick().catch((err) => {
-    console.error("[lens] poll failed", err instanceof Error ? err.message : err);
+    logError("poll failed", err instanceof Error ? err.message : err);
   });
 }, runtime.config.pollIntervalMs);

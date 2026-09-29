@@ -12,4 +12,5 @@ export interface XClient {
   getPost(id: string): Promise<XPost | null>;
   reply(input: { inReplyToId: string; text: string }): Promise<{ id: string }>;
   post(text: string): Promise<{ id: string }>;
+  sendDm(input: { recipientId: string; text: string }): Promise<{ id: string }>;
 }

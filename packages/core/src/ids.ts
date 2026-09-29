@@ -31,6 +31,27 @@ export function safeUrl(url: string): string {
 }
 
 export function log(message: string, extra?: unknown): void {
-  if (extra !== undefined) console.log(`[lens] ${message}`, extra);
-  else console.log(`[lens] ${message}`);
+  writeLog("info", message, extra);
+}
+
+export function logError(message: string, extra?: unknown): void {
+  writeLog("error", message, extra);
+}
+
+function writeLog(level: "info" | "error", message: string, extra?: unknown): void {
+  const fields =
+    extra == null
+      ? {}
+      : typeof extra === "object" && !Array.isArray(extra)
+        ? (extra as Record<string, unknown>)
+        : { detail: extra };
+  const line = JSON.stringify({
+    time: new Date().toISOString(),
+    level,
+    service: "lens",
+    msg: message,
+    ...fields,
+  });
+  if (level === "error") console.error(line);
+  else console.log(line);
 }

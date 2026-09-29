@@ -44,6 +44,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Link href="/verify" className="hover:underline">
                 Verify
               </Link>
+              <Link href="/pro" className="hover:underline">
+                Pro
+              </Link>
             </nav>
           </header>
           {children}

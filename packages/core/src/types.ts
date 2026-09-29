@@ -166,5 +166,13 @@ export interface LensConfig {
   solanaKeypairPath?: string;
   outboundEnabled: boolean;
   outboundMints: string[];
+  outboundDailyCap: number;
+  outboundDiscover: boolean;
   checkApiLimitPerHour: number;
+  rpcRetryAttempts: number;
+  proPriceUsdc: number;
+  proPeriodDays: number;
+  proTreasury?: string;
+  proRpcUrl: string;
+  usdcMint: string;
 }

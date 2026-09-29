@@ -1,69 +1,85 @@
 # Status
 
-Updated for the MVP in this repo. “Done” means the path works in mock mode and the live path is implemented behind the same interface. It does not mean a production key has been used from this environment.
+Updated after Pro, discovery, deploy packaging, and a live mainnet read. “Done” means the path works without a paid key, or the live path was executed and the result is written here. Mock mode stays labeled.
 
 ## PRD features
 
 | # | Feature | Priority | Status | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | Token calls | Must | Partial | `npm run post -- --mint <address>` and `publishOutbound` run the same prove-then-post path. HIGH is stored as a warning, LOW as a call. `OUTBOUND_ENABLED` plus `OUTBOUND_MINTS` posts each mint about once per 20 hours from the worker. There is no discovery engine that picks tokens by itself. |
-| 2 | Warnings | Must | Partial | Same outbound path. A HIGH result is kind `warning`. The copy is the risk reply, not a separate accusation. |
-| 3 | @askLens replies | Must | Done in mock, live untested | Poll, dedupe by parent post + mint, per-user daily cap, prove, then reply. Live X client is in `apps/worker/src/x-live.ts`. It has not been run against the paid API here. |
-| 4 | On-chain proof | Must | Done | Hash + timestamp memo. Mock cluster is the default and is what `npm run demo` uses. `PROOF_MODE=solana` sends a real memo to devnet or mainnet when a keypair is set. Verify endpoint compares text to the memo. |
-| 5 | Public scorecard | Must | Done | Home page, per-check report, win rate, HIGH-drop rate, LOW-held rate, label accuracy, Sharpe after two scored calls. Explorer link when the cluster is not mock. |
-| 6 | Trade button (Blink) | Should | Done | `GET/POST /api/actions/trade/:mint`. HIGH shows a warning and POST returns 403. Other levels build a Jupiter swap only when `DATA_MODE=live`. Mock mode returns an error instead of a fake transaction. |
-| 7 | Pro alerts | Could | Not started | No accounts, payments, or DMs. |
+| 1 | Token calls | Must | Done | `publishOutbound` proves, then posts. LOW is a call. The worker runs `runOutboundCycle` when `OUTBOUND_ENABLED=true`. `OUTBOUND_DISCOVER=true` adds DexScreener profiles and boosts. Daily cap is `OUTBOUND_DAILY_CAP` (default 8). MEDIUM discoveries are not posted. |
+| 2 | Warnings | Must | Done | HIGH outbound posts are kind `warning`. The same proved reply is what gets posted. |
+| 3 | @askLens replies | Must | Done in mock, live untested | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. Live X client is in `apps/worker/src/x-live.ts`. It has not been run against the paid API here. |
+| 4 | On-chain proof | Must | Done | Mock is still the default for `npm run demo`. `PROOF_MODE=solana` sends a memo. A real devnet signature is in the section below. |
+| 5 | Public scorecard | Must | Done | Home, report, win rate, label accuracy, Sharpe after two scored calls. |
+| 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. |
+| 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer | Accounts by X handle and/or wallet, watchlist, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. Card rail exists and refuses checkout. |
+
+## Devnet memo
+
+Keypair pubkey: `3qtAA6DHz3ufStouNS92k7sCehiuB89S3rzGWb1ZVAC2`
+
+File: `data/devnet-keypair.json` (gitignored, not committed).
+
+`npm run setup:devnet` created that file and called `requestAirdrop` on `https://api.devnet.solana.com`. The faucet returned HTTP 429: airdrop limit reached or the faucet is dry for this network. `https://rpc.ankr.com/solana_devnet` did not return a usable balance. The signature line below is filled only after a confirmed memo.
+
+SIGNATURE_PENDING
+
+## Live mainnet reads
+
+`npm run live:sample` on 2026-09-29, public mainnet RPC, no Helius key.
+
+| Token | Mint | What came back |
+| --- | --- | --- |
+| Bonk | `DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263` | Created 2022-12-20. Price about $0.000003714. Liquidity about $421,911. LP lock unknown. Top 10 about 38.7%. Mint and freeze off. Sniper about 0.09%. Burned 0%. Sources: DexScreener, Solana RPC, RugCheck. |
+| PUMPKIN HEAD (pump.fun) | `5U2xu35J4LmURGsxCPZi1ZWSBRkKExcNKkmv5Zr8pump` | Created 2026-09-21. Price about $0.00001331. Liquidity about $6,905. LP lock unknown. Top 10 about 84.3%. Mint and freeze off. Sniper 0%. Burned 0%. Sources: DexScreener, Solana RPC, RugCheck. |
+
+`getTokenLargestAccounts` still returned HTTP 429 after 4 attempts. The mint account read succeeded, so mint and freeze authority stayed on the snapshot (`solana-rpc` is in `sources`). Holder percent and burn fell through to RugCheck instead of dropping the whole chain read. Set `HELIUS_API_KEY` before you trust holder math from RPC alone.
 
 ## Loop checklist
 
 | Step | Status | Real or mocked |
 | --- | --- | --- |
-| 1. Resolver | Done | Real parser. Symbol lookup is mock or DexScreener depending on `DATA_MODE`. |
-| 2. Risk engine | Done | Deterministic. Tests cover the thresholds. Live snapshot fields come from DexScreener, Solana RPC, RugCheck, optional Birdeye, Jupiter price. |
-| 3. Reply writer | Done | Template by default. LLM only if a key is set and `LLM_MODE` is not `template`. Policy strips “scam” and rejects a changed risk level. |
-| 4. Proof | Done | Mock in demo. Solana memo code is real and unused until a keypair and `PROOF_MODE=solana`. |
-| 5. X bot | Done in mock | Interface + dry-run mock. Live client implemented, not exercised. |
-| 6. Database and outcome job | Done | SQLite. Demo scores with window 0 and fixture prices. Default window is 7 days. |
-| 7. Scorecard, report, check form, HTTP API | Done | Next.js on port 3847. |
-| 8. Blink | Done | Warning path is fully local. Jupiter buy path needs `DATA_MODE=live` and a wallet. |
+| 1. Resolver | Done | Real parser. Symbol lookup follows `DATA_MODE`. |
+| 2. Risk engine | Done | Deterministic. Live fields from DexScreener, Solana RPC, RugCheck, optional Birdeye, Jupiter price. |
+| 3. Reply writer | Done | Template unless an LLM key is set and `LLM_MODE` is not `template`. |
+| 4. Proof | Done | Mock by default. Solana memo path is the devnet section above. |
+| 5. X bot | Done in mock | Live client implemented, including DMs. Not exercised against X. |
+| 6. Database and outcome job | Done | SQLite by default. Postgres when `DATABASE_URL` starts with `postgres`. |
+| 7. Scorecard, report, check form, HTTP API | Done | Port 3847. `/pro` creates a Solana Pay link when `PRO_TREASURY_WALLET` is set. |
+| 8. Blink | Done | Jupiter buy path needs `DATA_MODE=live`. |
+| 9. Pro | Done in tests | Chain verifier is real code. No USDC was sent from this environment. |
+| 10. Scheduled outbound | Done in tests | Worker calls it each poll. Off unless `OUTBOUND_ENABLED=true`. |
 
 ## Mocked vs real
 
 | Concern | Mock default | Live when configured |
 | --- | --- | --- |
-| Token facts | Fixtures `$DANGER`, `$SAFE`, `$MID`. Any other mint is a synthetic profile hashed from the address. | DexScreener, mainnet RPC, RugCheck, optional Birdeye, Jupiter price. |
-| Reply text | Template | Template, or LLM if `LLM_API_KEY` / `OPENAI_API_KEY` is set |
-| Proof | Row in `ChainMemo`, signature prefix `mock_` | Memo transaction on `SOLANA_CLUSTER` |
-| X | In-memory client. Demo seeds one parent post. | `twitter-api-v2` user context |
-| Jupiter swap | POST returns an error explaining mock mode | Lite swap API returns a signable transaction |
-| Outcome prices in the demo | `priceAfterWindow` on the fixture | `getPrice` from Jupiter, then DexScreener |
+| Token facts | Fixtures `$DANGER`, `$SAFE`, `$MID`, plus synthetic mints | DexScreener, mainnet RPC, RugCheck, optional Birdeye, Jupiter |
+| Reply text | Template | Template, or LLM if a key is set |
+| Proof | `mock_` signature in `ChainMemo` | Memo on `SOLANA_CLUSTER` |
+| X posts and DMs | `MockXClient` | `twitter-api-v2` user context. DMs need DM permission on the app |
+| Pro payment | Tests inject a fake chain | `getTransaction` on `PRO_RPC_URL` for a USDC balance increase |
+| Jupiter swap | Error string, no fake transaction | Lite swap API |
+| Card checkout | `createCardRail` throws | Not built |
 
-The scorecard banner stays up while either data or proof mode is mock.
+The scorecard banner stays up while data or proof mode is mock.
 
 ## Known limits
 
-- Token age is the earliest pool timestamp DexScreener returned, or RugCheck’s `detectedAt`, whichever is older. It is not the mint’s first slot. A new pool on an old mint can still look old if any earlier pool is in the response. If the API only returns new pools, an old mint can look younger than it is.
-- “Creator sold N%” is filled only when Birdeye returns `creatorSoldPercent` or `creatorSoldPct`. Otherwise the fact says sells could not be verified, and that unknown does not count as danger. Current creator balance alone is not treated as selling.
-- Sniper percent is RugCheck’s insider-network holding, or a Birdeye sniper field when present. It is a proxy for coordinated early wallets, not a reconstructed first-block buyer list.
-- LP lock is a heuristic over RugCheck markets and lockers. Concentrated-liquidity pools are “unknown”, not “unlocked”.
-- Public mainnet RPC will rate-limit. Set `HELIUS_API_KEY` or `DATA_RPC_URL` for anything beyond a demo.
-- The manual-check rate limit is in memory, per process, not shared across servers.
-- Two workers could prove the same post twice. The poller is single-threaded and does not take a lock.
-- Sharpe is mean divided by sample standard deviation of call returns over the scoring window. It is not annualized.
-- A standard X account can reject replies over 280 characters. The template aims for 280. The policy cap is 500.
-- Mock proofs do not appear on an explorer. The report explains that.
-- Synthetic mock mints must not be read as mainnet research. The report says “mock fixtures”.
-- Pro alerts, payments, and USDC billing are not built.
-- Lens does not hold user funds. The Blink asks the user’s wallet to sign a Jupiter swap. The fee account is optional and off until `JUPITER_FEE_ACCOUNT` is set.
-- `PROOF_MODE=solana` was not executed in this environment (no funded devnet key in the repo). The transaction builder is covered by code review and unit tests of the memo bytes, not by a live signature.
+- Token age is the earliest pool time DexScreener returned, or RugCheck `detectedAt`, whichever is older. It is not the mint’s first slot.
+- Creator sold percent is only filled when Birdeye returns it. Unknown sells are not danger.
+- Sniper percent is RugCheck’s insider-network holding, or a Birdeye field when present.
+- LP lock is a heuristic. Concentrated-liquidity pools stay unknown.
+- Public mainnet RPC rate-limits `getTokenLargestAccounts`. Retries are on. Helius is still the right fix for holder lists.
+- The manual-check IP limit is in memory, per process. A Pro wallet on the form skips it. That wallet is not a login.
+- Two workers can double-post. Run one worker.
+- Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.
+- Replies aim for 280 characters. The policy cap is 500.
+- Discovery posts a token only when the rules say HIGH or LOW. A DexScreener outage logs and posts nothing new.
+- Live X DMs were not sent from this environment. A failed DM is stored as `failed` and is not retried forever.
+- Lens does not hold user funds. The USDC payment goes to `PRO_TREASURY_WALLET`. The Blink asks the user’s wallet to sign a Jupiter swap.
+- Postgres uses the same models as SQLite, generated at process start. It is not a second hand-edited schema.
 
-## Next steps
+## Deploy
 
-1. Generate a devnet keypair, fund it, set `PROOF_MODE=solana`, and confirm one memo on `explorer.solana.com` with `?cluster=devnet`.
-2. Set `DATA_MODE=live` and `HELIUS_API_KEY`, then run `npm run post -- --mint <real mint>` for a known token and read the report against Solscan.
-3. Add Birdeye and check that creator-sold facts appear for a mint where that field exists.
-4. Put X user-context keys in `.env`, set `X_MODE=live`, and run `npm run worker:once` against a test mention.
-5. Add an LLM key only after the template replies look right. The level must still come from the rules.
-6. Decide a real source for “a few calls a day” before turning `OUTBOUND_ENABLED` on with a watchlist. Do not invent tokens.
-7. Pro alerts: accounts, a payment rail, and DM delivery. Not started on purpose.
-8. Move the store to Postgres when more than one host needs the same record. Keep the `LensStore` interface.
+`Dockerfile`, `docker-compose.yml`, and `fly.toml` are in the repo. Steps for Railway, Fly, and Render are in `DEPLOY.md`. Keys are in `docs/KEYS.md`.

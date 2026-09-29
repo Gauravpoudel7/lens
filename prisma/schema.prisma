@@ -120,3 +120,68 @@ model BotCursor {
   id      String @id
   sinceId String
 }
+
+model Account {
+  id        String    @id
+  xUserId   String?   @unique
+  xHandle   String?   @unique
+  wallet    String?   @unique
+  tier      String    @default("free")
+  proUntil  DateTime?
+  createdAt DateTime  @default(now())
+  watches   Watch[]
+  payments  Payment[]
+  alerts    Alert[]
+
+  @@map("accounts")
+}
+
+model Watch {
+  id        String   @id
+  userId    String
+  user      Account  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mint      String
+  symbol    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, mint])
+  @@index([mint])
+}
+
+model Payment {
+  id        String   @id
+  userId    String
+  user      Account  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String
+  reference String   @unique
+  amountUsd Float
+  amountRaw String
+  mint      String
+  recipient String
+  signature String?
+  status    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Alert {
+  id         String   @id
+  userId     String
+  user       Account  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkId    String
+  mint       String
+  text       String
+  channel    String
+  status     String
+  xMessageId String?
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, checkId])
+  @@index([status])
+}
+
+model OutboundDay {
+  day   String @id
+  count Int    @default(0)
+}

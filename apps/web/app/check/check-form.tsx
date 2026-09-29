@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 export function CheckForm({
@@ -12,6 +13,7 @@ export function CheckForm({
 }) {
   const router = useRouter();
   const [input, setInput] = useState("");
+  const [wallet, setWallet] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -28,7 +30,7 @@ export function CheckForm({
       const response = await fetch("/api/check", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: value }),
+        body: JSON.stringify({ input: value, wallet: wallet.trim() || undefined }),
       });
       const body = (await response.json()) as { id?: string; error?: string };
       if (!response.ok || !body.id) {
@@ -55,6 +57,17 @@ export function CheckForm({
         onChange={(event) => setInput(event.target.value)}
         placeholder="CA: paste a Solana mint, or a post that says $TICKER"
         disabled={pending}
+      />
+      <label htmlFor="pro-wallet" className="text-sm">
+        Paying wallet, optional
+      </label>
+      <Input
+        id="pro-wallet"
+        value={wallet}
+        onChange={(event) => setWallet(event.target.value)}
+        placeholder="Pro wallet skips the hourly limit"
+        disabled={pending}
+        autoComplete="off"
       />
       <div className="flex flex-wrap gap-2">
         {examples.map((example) => (

@@ -9,6 +9,7 @@ import {
   scoreDueChecks,
 } from "@lens/core";
 import { bootstrapEnv, createRuntime, repoRoot } from "@lens/db";
+import { schemaFile } from "./prepare-schema.mjs";
 
 bootstrapEnv();
 process.env.DATA_MODE = "mock";
@@ -16,7 +17,7 @@ process.env.PROOF_MODE = "mock";
 process.env.X_MODE = "mock";
 process.env.LLM_MODE = "template";
 
-execSync("npx prisma db push --skip-generate", {
+execSync(`npx prisma db push --schema "${schemaFile()}" --skip-generate`, {
   cwd: repoRoot,
   stdio: "inherit",
   env: process.env,
