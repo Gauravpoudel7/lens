@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #efe6d4;
-  --paper-2: #f7f1e4;
-  --ink: #1c1612;
-  --muted: #6f655a;
-  --line: #d9cdb8;
-  --high: #8d2f2a;
-  --med: #8a5a12;
-  --low: #1d6a45;
-  --stamp: #f4efe4;
+  --paper: #07080d;
+  --paper-2: #12151c;
+  --ink: #f4f6fb;
+  --muted: #9aa3b5;
+  --line: rgba(255, 255, 255, 0.1);
+  --high: #fb7185;
+  --med: #fbbf24;
+  --low: #34d399;
+  --stamp: #12151c;
 }
 
 @theme inline {
@@ -22,21 +22,18 @@
   --color-med: var(--med);
   --color-low: var(--low);
   --color-stamp: var(--stamp);
-  --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
+  --font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  background: var(--paper);
+  background:
+    radial-gradient(900px 420px at 80% -10%, rgba(52, 211, 153, 0.16), transparent 55%),
+    radial-gradient(700px 380px at -10% 10%, rgba(56, 189, 248, 0.08), transparent 50%),
+    var(--paper);
   color: var(--ink);
-  font-family: var(--font-sans), "Public Sans", sans-serif;
-}
-
-.ledger-rule {
-  background-image: linear-gradient(to bottom, transparent 31px, rgba(28, 22, 18, 0.05) 32px);
-  background-size: 100% 32px;
+  font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 ::selection {
-  background: #e7c9a2;
+  background: rgba(52, 211, 153, 0.35);
 }

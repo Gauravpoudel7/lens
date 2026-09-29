@@ -46,8 +46,8 @@ export function CheckForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-6 space-y-3">
-      <label htmlFor="token-input" className="text-sm">
+    <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <label htmlFor="token-input" className="text-sm text-zinc-300">
         Post text or token address
       </label>
       <Textarea
@@ -58,7 +58,7 @@ export function CheckForm({
         placeholder="CA: paste a Solana mint, or a post that says $TICKER"
         disabled={pending}
       />
-      <label htmlFor="pro-wallet" className="text-sm">
+      <label htmlFor="pro-wallet" className="text-sm text-zinc-300">
         Paying wallet, optional
       </label>
       <Input
@@ -86,7 +86,7 @@ export function CheckForm({
         ))}
       </div>
       {error ? (
-        <p className="border border-high/30 bg-[#f8e8e4] px-3 py-2 text-sm text-high" role="alert">
+        <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
           {error}
         </p>
       ) : null}

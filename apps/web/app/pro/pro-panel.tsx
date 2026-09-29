@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -35,6 +36,30 @@ export function ProPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = session?.solanaPayUrl;
+    if (!url) {
+      setQr(null);
+      return;
+    }
+    let cancelled = false;
+    QRCode.toDataURL(url, {
+      margin: 1,
+      width: 220,
+      color: { dark: "#07080d", light: "#ffffff" },
+    })
+      .then((dataUrl) => {
+        if (!cancelled) setQr(dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setQr(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.solanaPayUrl]);
 
   async function post(url: string, body: unknown) {
     const response = await fetch(url, {
@@ -125,10 +150,10 @@ export function ProPanel({
   }
 
   return (
-    <div className="mt-8 space-y-8">
-      <form onSubmit={onCheckout} className="space-y-3">
-        <h2 className="font-serif text-2xl">1. Who gets the alerts</h2>
-        <label className="block text-sm" htmlFor="x-handle">
+    <div className="space-y-6">
+      <form onSubmit={onCheckout} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <h2 className="text-lg font-semibold">1. Who gets the alerts</h2>
+        <label className="block text-sm text-zinc-300" htmlFor="x-handle">
           X handle
         </label>
         <Input
@@ -138,7 +163,7 @@ export function ProPanel({
           placeholder="@yourhandle"
           autoComplete="off"
         />
-        <label className="block text-sm" htmlFor="wallet">
+        <label className="block text-sm text-zinc-300" htmlFor="wallet">
           Wallet
         </label>
         <Input
@@ -148,13 +173,13 @@ export function ProPanel({
           placeholder="Solana wallet that will pay, or that you already paid from"
           autoComplete="off"
         />
-        <p className="text-sm leading-6 text-muted">
+        <p className="text-sm leading-6 text-zinc-400">
           Pro is ${priceUsd.toFixed(2)} USDC for {periodDays} days. The transfer uses Solana Pay: USDC mint{" "}
-          <span className="break-all text-ink">{usdcMint}</span>. A unique reference is included so Lens can match
-          the payment. Card checkout is a separate rail and is not turned on.
+          <span className="break-all text-zinc-200">{usdcMint}</span>. A unique reference is included so Lens can match
+          the payment.
         </p>
         {!treasurySet ? (
-          <p className="border border-high/30 bg-[#f8e8e4] px-3 py-2 text-sm text-high" role="status">
+          <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="status">
             PRO_TREASURY_WALLET is empty, so checkout cannot start until that wallet is set.
           </p>
         ) : null}
@@ -169,21 +194,27 @@ export function ProPanel({
       </form>
 
       {session?.solanaPayUrl ? (
-        <section className="space-y-2 border border-line bg-paper-2 p-4">
-          <h2 className="font-serif text-2xl">2. Pay</h2>
-          <p className="text-sm leading-6 text-muted">
-            Open this in a Solana Pay wallet. It sends {session.amountUsd.toFixed(2)} USDC to {session.recipient}.
+        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <h2 className="text-lg font-semibold">2. Pay</h2>
+          <p className="text-sm leading-6 text-zinc-400">
+            Scan the code or open the link in a Solana Pay wallet. It sends {session.amountUsd.toFixed(2)} USDC to{" "}
+            {session.recipient}.
           </p>
-          <a className="block break-all text-sm underline" href={session.solanaPayUrl}>
+          {qr ? (
+            // Data URL from the local qrcode library, not a remote image.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qr} alt="Solana Pay QR code" width={220} height={220} className="rounded-xl bg-white p-2" />
+          ) : null}
+          <a className="block break-all text-sm text-emerald-300 hover:text-emerald-200" href={session.solanaPayUrl}>
             {session.solanaPayUrl}
           </a>
-          <p className="text-xs text-muted">Reference {session.reference}</p>
+          <p className="text-xs text-zinc-500">Reference {session.reference}</p>
         </section>
       ) : null}
 
-      <section className="space-y-3">
-        <h2 className="font-serif text-2xl">3. Verify the transfer</h2>
-        <label className="block text-sm" htmlFor="reference">
+      <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <h2 className="text-lg font-semibold">3. Verify the transfer</h2>
+        <label className="block text-sm text-zinc-300" htmlFor="reference">
           Payment reference
         </label>
         <Input
@@ -199,9 +230,9 @@ export function ProPanel({
         {tier ? <p className="text-sm">Status: {tier === "pro" ? "Pro" : "Free"}</p> : null}
       </section>
 
-      <form onSubmit={onWatch} className="space-y-3">
-        <h2 className="font-serif text-2xl">4. Watchlist</h2>
-        <p className="text-sm leading-6 text-muted">
+      <form onSubmit={onWatch} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <h2 className="text-lg font-semibold">4. Watchlist</h2>
+        <p className="text-sm leading-6 text-zinc-400">
           When a watched mint comes back HIGH, Lens sends a DM to the X account on this Pro record. Free accounts
           stay on the daily reply cap and do not get DMs.
         </p>
@@ -215,22 +246,22 @@ export function ProPanel({
           Add to watchlist
         </Button>
         {watches.length === 0 ? (
-          <p className="text-sm text-muted">No watches loaded.</p>
+          <p className="text-sm text-zinc-500">No watches loaded.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {watches.map((watch) => (
-              <li key={watch.id} className="border-b border-line pb-2">
+              <li key={watch.id} className="border-b border-white/10 pb-2">
                 <span className="font-medium">${watch.symbol}</span>{" "}
-                <span className="break-all text-muted">{watch.mint}</span>
+                <span className="break-all text-zinc-500">{watch.mint}</span>
               </li>
             ))}
           </ul>
         )}
       </form>
 
-      {message ? <p className="text-sm leading-6">{message}</p> : null}
+      {message ? <p className="text-sm leading-6 text-zinc-200">{message}</p> : null}
       {error ? (
-        <p className="border border-high/30 bg-[#f8e8e4] px-3 py-2 text-sm text-high" role="alert">
+        <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
           {error}
         </p>
       ) : null}

@@ -22,13 +22,13 @@ export default async function CheckPage() {
   }
 
   return (
-    <main className="max-w-2xl py-8">
-      <p className="text-xs uppercase tracking-[0.18em] text-muted">Manual check</p>
-      <h1 className="mt-2 font-serif text-4xl">Same rules the bot uses.</h1>
-      <p className="mt-3 text-sm leading-6 text-muted">
-        Paste a contract address, a $ticker, or the text of a promo. Lens resolves the token, scores
-        it with fixed rules, writes the reply, and stores a proof before the report opens. The result
-        is added to the public record.
+    <main className="max-w-2xl py-10 sm:py-14">
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">Manual check</p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Same rules the bot uses.</h1>
+      <p className="mt-3 text-sm leading-6 text-zinc-400">
+        Paste a contract address, a $ticker, or the text of a promo. Lens resolves the token, scores it with fixed
+        rules, writes the reply, and stores a proof before the report opens. The result is added to the public
+        record. Free checks are rate-limited per hour.
       </p>
       <ModeBanner dataMode={dataMode} proofMode={proofMode} />
       <CheckForm

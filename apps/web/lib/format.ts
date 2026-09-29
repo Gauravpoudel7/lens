@@ -26,6 +26,15 @@ export function formatRate(value: number | null): string {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
+export function formatUsd(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 10_000) return `$${Math.round(value).toLocaleString("en-US")}`;
+  if (value >= 1) return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  if (value >= 0.01) return `$${value.toFixed(4)}`;
+  return `$${value.toPrecision(3)}`;
+}
+
 export function kindLabel(kind: CheckRecord["kind"]): string {
   switch (kind) {
     case "reply":

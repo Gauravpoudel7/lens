@@ -1,60 +1,73 @@
 import type { Metadata } from "next";
-import { Newsreader, Public_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 
-const sans = Public_Sans({
+const sans = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-inter",
 });
 
-const serif = Newsreader({
-  subsets: ["latin"],
-  variable: "--font-serif",
-});
+const HERO =
+  "Tag @askLens on X under any Solana coin and get an instant, provable risk check";
 
 export const metadata: Metadata = {
   title: {
-    default: "Lens public record",
+    default: "Lens",
     template: "%s · Lens",
   },
-  description:
-    "Lens is the Solana risk bot @askLens. Every reply is hashed before it is posted, and the full record stays public.",
+  description: HERO,
+  openGraph: {
+    title: "Lens",
+    description: HERO,
+    siteName: "Lens",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Lens",
+    description: HERO,
+  },
 };
+
+const NAV = [
+  { href: "/", label: "Record" },
+  { href: "/check", label: "Run a check" },
+  { href: "/verify", label: "Verify" },
+  { href: "/pro", label: "Pro" },
+];
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${serif.variable} antialiased`}>
-        <div className="mx-auto min-h-screen max-w-5xl px-4 pb-16 sm:px-6">
-          <header className="flex flex-wrap items-end justify-between gap-4 border-b border-ink py-5">
-            <div>
-              <Link href="/" className="font-serif text-4xl leading-none tracking-tight">
-                Lens
-              </Link>
-              <p className="mt-1 text-sm text-muted">The analyst that can&apos;t edit its record.</p>
-            </div>
-            <nav className="flex items-center gap-4 text-sm">
-              <Link href="/" className="hover:underline">
-                Record
-              </Link>
-              <Link href="/check" className="hover:underline">
-                Run a check
-              </Link>
-              <Link href="/verify" className="hover:underline">
-                Verify
-              </Link>
-              <Link href="/pro" className="hover:underline">
-                Pro
-              </Link>
+      <body className={`${sans.variable} antialiased`}>
+        <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07080d]/80 backdrop-blur-md">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+            <Link href="/" className="flex items-center gap-2.5">
+              {/* Public mark, same geometry as the favicon. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/mark.svg" alt="" width={32} height={32} className="size-8" />
+              <span className="text-lg font-semibold tracking-tight">Lens</span>
+            </Link>
+            <nav className="flex flex-wrap items-center gap-1 text-sm text-zinc-300">
+              {NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-full px-3 py-1.5 hover:bg-white/5 hover:text-white"
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
-          </header>
-          {children}
-          <footer className="mt-16 border-t border-line pt-4 text-xs leading-5 text-muted">
-            Lens is an automated account. It shows facts with sources, never a buy or sell instruction,
-            and every reply ends with “Not financial advice.” Wrong calls stay on this page.
-          </footer>
-        </div>
+          </div>
+        </header>
+        <div className="mx-auto min-h-[calc(100vh-8rem)] max-w-6xl px-4 pb-16 sm:px-6">{children}</div>
+        <footer className="border-t border-white/10">
+          <div className="mx-auto max-w-6xl px-4 py-6 text-xs leading-5 text-zinc-500 sm:px-6">
+            Lens is an automated account. It shows facts with sources, never a buy or sell instruction, and every
+            reply ends with “Not financial advice.” Wrong calls stay on this page.
+          </div>
+        </footer>
       </body>
     </html>
   );
