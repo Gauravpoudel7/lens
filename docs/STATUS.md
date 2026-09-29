@@ -9,7 +9,7 @@ Updated after Pro, discovery, deploy packaging, and a live mainnet read. “Done
 | 1 | Token calls | Must | Done | `publishOutbound` proves, then posts. LOW is a call. The worker runs `runOutboundCycle` when `OUTBOUND_ENABLED=true`. `OUTBOUND_DISCOVER=true` adds DexScreener profiles and boosts. Daily cap is `OUTBOUND_DAILY_CAP` (default 8). MEDIUM discoveries are not posted. |
 | 2 | Warnings | Must | Done | HIGH outbound posts are kind `warning`. The same proved reply is what gets posted. |
 | 3 | @askLens replies | Must | Done in mock, live untested | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. Live X client is in `apps/worker/src/x-live.ts`. It has not been run against the paid API here. |
-| 4 | On-chain proof | Must | Done | Mock is still the default for `npm run demo`. `PROOF_MODE=solana` sends a memo. A real devnet signature is in the section below. |
+| 4 | On-chain proof | Must | Publisher done, no devnet signature yet | Mock is still the default for `npm run demo`. `PROOF_MODE=solana` builds and sends a memo. This environment could not fund the keypair, so no explorer signature is recorded below. |
 | 5 | Public scorecard | Must | Done | Home, report, win rate, label accuracy, Sharpe after two scored calls. |
 | 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. |
 | 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer | Accounts by X handle and/or wallet, watchlist, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. Card rail exists and refuses checkout. |
@@ -20,9 +20,17 @@ Keypair pubkey: `3qtAA6DHz3ufStouNS92k7sCehiuB89S3rzGWb1ZVAC2`
 
 File: `data/devnet-keypair.json` (gitignored, not committed).
 
-`npm run setup:devnet` created that file and called `requestAirdrop` on `https://api.devnet.solana.com`. The faucet returned HTTP 429: airdrop limit reached or the faucet is dry for this network. `https://rpc.ankr.com/solana_devnet` did not return a usable balance. The signature line below is filled only after a confirmed memo.
+`npm run setup:devnet` created that file and called `requestAirdrop` on `https://api.devnet.solana.com`. The faucet returned HTTP 429: airdrop limit reached or the faucet is dry for this IP. Balance is still 0 lamports. No memo was sent. There is no signature to publish.
 
-SIGNATURE_PENDING
+Other faucets tried from this machine, all without a funded account:
+
+- [faucet.solana.com](https://faucet.solana.com) requires a GitHub login for every amount that was accepted by the API.
+- Jumpbit and solfaucet.com call the same public `requestAirdrop`. They hit the same 429.
+- QuickNode’s faucet asked for a logged-in account and a mainnet SOL balance on the same address.
+- j.tools returned faucet unavailable. Triangle’s faucet page was suspended. Ankr’s public devnet URL wants an API key. Helius devnet returns 401 without a key. MagicBlock’s free airdrop is disabled.
+- On-chain proof-of-work faucets (`devnet-pow`) were empty except one reward of 100 lamports, which is below the fee and below rent for a new account.
+
+To land the memo: send devnet SOL to `3qtAA6DHz3ufStouNS92k7sCehiuB89S3rzGWb1ZVAC2` from a faucet on a network that is not rate-limited (the official page with GitHub is the reliable one), then run `npm run demo:devnet`. Paste the printed signature and `https://explorer.solana.com/tx/<sig>?cluster=devnet` into this section. Do not invent a signature.
 
 ## Live mainnet reads
 
@@ -71,6 +79,7 @@ The scorecard banner stays up while data or proof mode is mock.
 - Sniper percent is RugCheck’s insider-network holding, or a Birdeye field when present.
 - LP lock is a heuristic. Concentrated-liquidity pools stay unknown.
 - Public mainnet RPC rate-limits `getTokenLargestAccounts`. Retries are on. Helius is still the right fix for holder lists.
+- The devnet keypair in this environment has 0 SOL. `npm run demo:devnet` will fail until that pubkey is funded. See the Devnet memo section.
 - The manual-check IP limit is in memory, per process. A Pro wallet on the form skips it. That wallet is not a login.
 - Two workers can double-post. Run one worker.
 - Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.

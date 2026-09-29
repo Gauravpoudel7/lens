@@ -42,7 +42,7 @@ This is a keypair file, not a vendor key.
 1. Run `npm run setup:devnet`.
 2. The script writes `data/devnet-keypair.json` and asks the devnet faucet for SOL. That file is gitignored. Do not commit it.
 3. In `.env` set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`.
-4. If the public faucet says you hit the limit, send devnet SOL to the printed pubkey from [https://faucet.solana.com](https://faucet.solana.com) (Devnet), then run `npm run setup:devnet` again. It will keep the same file once it exists.
+4. If the script prints HTTP 429, the public airdrop is rate-limited for your IP. Open [https://faucet.solana.com](https://faucet.solana.com), choose Devnet, sign in with GitHub, and send SOL to the pubkey the script printed. Then run `npm run setup:devnet` again. It keeps the same file once it exists. A balance of about 0.05 SOL is enough for many memos.
 5. `npm run demo:devnet` sends one real memo and prints an explorer link.
 
 ## LLM (wording only)

@@ -109,7 +109,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 - **Solana RPC (Helius or any mainnet URL)** for mint authority, freeze authority, supply, and top holders. Public mainnet RPC works until it rate-limits you.
 - **No key** for DexScreener, RugCheck, or Jupiter lite quotes.
 - **Birdeye** only if you want their security payload (creator sold percent, when the API returns it).
-- **A devnet keypair with SOL** for on-chain proofs. Run `npm run setup:devnet`. The JSON array stays in `data/`, which is gitignored. Set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`. Then `npm run demo:devnet`.
+- **A devnet keypair with SOL** for on-chain proofs. Run `npm run setup:devnet`. The JSON array stays in `data/`, which is gitignored. If the public faucet returns 429, fund the printed pubkey from [faucet.solana.com](https://faucet.solana.com) (Devnet, GitHub login) and run the script again. Set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`. Then `npm run demo:devnet`.
 - **`PRO_TREASURY_WALLET`** if you want the Pro page to create a Solana Pay link. No card processor is wired up. The card rail is an interface that returns “not configured”.
 - **X API user-context tokens** (key, secret, access token, access secret) and `X_MODE=live` to actually read mentions and post.
 - **An OpenAI-compatible key** if you want the model to phrase replies. Without it, the template writer is used. The model never chooses the risk level.
