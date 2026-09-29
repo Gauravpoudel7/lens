@@ -19,6 +19,7 @@
     "discover": "tsx scripts/discover.ts",
     "live:sample": "tsx scripts/live-sample.ts",
     "x:oauth2-login": "tsx scripts/x-oauth2-login.ts",
+    "doctor": "tsx scripts/doctor.ts",
     "post": "tsx scripts/post.ts",
     "score": "tsx scripts/score.ts",
     "test": "vitest run",

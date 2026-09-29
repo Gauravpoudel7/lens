@@ -22,6 +22,7 @@ export interface ChainSummary {
   decimals: number;
   supply: bigint;
   mintAuthorityActive: boolean;
+  mintAuthority?: string | null;
   freezeAuthorityActive: boolean;
   top10HolderPct: number | null;
   burnedPct: number | null;
@@ -315,6 +316,7 @@ export function mergeTokenData(input: {
     creatorBalancePct: rug?.creatorBalancePct ?? birdeye?.creatorBalancePct ?? null,
     mintAuthorityActive:
       chain?.mintAuthorityActive ?? birdeye?.mintAuthorityActive ?? rug?.mintAuthorityActive ?? null,
+    mintAuthority: chain?.mintAuthority ?? null,
     freezeAuthorityActive:
       chain?.freezeAuthorityActive ?? birdeye?.freezeAuthorityActive ?? rug?.freezeAuthorityActive ?? null,
     sniperPct: birdeye?.sniperPct ?? rug?.sniperPct ?? null,

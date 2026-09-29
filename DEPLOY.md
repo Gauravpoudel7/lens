@@ -32,26 +32,46 @@ On startup the container rewrites the Prisma provider to `postgresql`, runs `pri
 
 Change the Postgres password before anyone else can reach port 5432. The compose file uses `lens` / `lens` so a laptop can boot it.
 
-## Railway
+## Railway, one service
 
-1. Create a project. Add a **PostgreSQL** database. Copy its `DATABASE_URL`.
-2. Add a service from this repo. Railway should detect the Dockerfile. If it asks for a start command, use `sh scripts/docker-entry.sh`.
-3. Variables for the web service:
-   - `LENS_ROLE=web`
-   - `PORT=3847`
-   - `DATABASE_URL` from the Postgres plugin
-   - `PUBLIC_BASE_URL` = the public https URL Railway assigns (set it again after the first deploy if the domain was unknown)
-   - `DATA_MODE=live`
-   - `PROOF_MODE=solana`
-   - `SOLANA_CLUSTER=devnet`
-   - `SOLANA_KEYPAIR` = the JSON array from `data/devnet-keypair.json` (one line). Prefer this over a file, because the container disk is ephemeral.
-   - `HELIUS_API_KEY` when you have one
-   - `X_MODE=live` when you want the bot to post. OAuth 2.0: `X_AUTH_MODE=oauth2`, `X_OAUTH2_CLIENT_ID`, `X_OAUTH2_CLIENT_SECRET`, and `X_OAUTH2_REFRESH_TOKEN`. OAuth 1.0a: the four `X_API_*` / `X_ACCESS_*` keys and `X_AUTH_MODE=oauth1`.
-   - `PRO_TREASURY_WALLET` when you want Pro checkout
-4. Settings → health check path `/api/health`. The container listens on 3847.
-5. Add a second service from the same repo and Dockerfile. Same variables, except `LENS_ROLE=worker` and no public port. Give it `OUTBOUND_ENABLED=true` and `OUTBOUND_DISCOVER=true` only when you want scheduled calls. `OUTBOUND_DAILY_CAP` defaults to 8.
+This is the path for an owner who does not want to assemble two services by hand. `railway.json` tells Railway to build the Dockerfile, start `sh scripts/docker-entry.sh`, and check `/api/health`. Set `LENS_ROLE=all` and that one container runs the website and the bot together.
 
-Do not run two workers. The poller does not take a lock.
+1. Sign up at [railway.com](https://railway.com). Logging in with GitHub is enough.
+2. Click **New Project**, then **Deploy from GitHub repo**, and pick this repository. Wait until the first build finishes. It can fail until the variables below exist. That is fine.
+3. Open the service. Go to **Variables**. Add these. Leave `X_MODE=mock` until step 8.
+
+```text
+LENS_ROLE=all
+PORT=3847
+DATA_MODE=live
+PROOF_MODE=solana
+SOLANA_CLUSTER=devnet
+PUBLIC_BASE_URL=https://YOUR-RAILWAY-DOMAIN
+HELIUS_API_KEY=
+SOLANA_KEYPAIR=
+X_MODE=mock
+X_AUTH_MODE=oauth2
+X_OAUTH2_CLIENT_ID=
+X_OAUTH2_CLIENT_SECRET=
+X_OAUTH2_ACCESS_TOKEN=
+X_OAUTH2_REFRESH_TOKEN=
+X_BOT_USER_ID=
+X_REPLY_LINKS=false
+POLL_INTERVAL_MS=180000
+MAX_X_REPLIES_PER_DAY=50
+```
+
+`SOLANA_KEYPAIR` is the one-line JSON array from the keypair file, including the brackets. Do not upload the file.
+
+4. Add the database. In the project, click **New**, then **Database**, then **PostgreSQL**. Open the Postgres service, copy `DATABASE_URL`, and paste it into the Lens service variables. Two processes share that database. Do not point them at one SQLite file.
+5. SQLite is the other option, for a single copy of the app only. In the Lens service, **Settings**, **Volumes**, mount a volume at `/app/data`. Do not set `DATABASE_URL`. Do not add a second service. Postgres is the one to use once the bot and the site both write.
+6. On your own computer, in this repo, run `npm run x:oauth2-login`. Approve the app in the browser. The script writes the tokens into `.env` on that computer. Copy `X_OAUTH2_ACCESS_TOKEN` and `X_OAUTH2_REFRESH_TOKEN` into the Railway variables. Do not commit `.env`. Do not paste the tokens into chat.
+7. Copy the public URL Railway shows (Settings, Networking, Generate Domain) into `PUBLIC_BASE_URL`, then redeploy.
+8. On your computer run `npm run doctor`. It prints `ready` or `not-ready` for each check and does not post. When you want it to call X once, run `npm run doctor -- --x`. That is a read of who the token belongs to. It does not tweet. When the list says `Ready.`, set `X_MODE=live` on Railway and redeploy.
+
+`OUTBOUND_ENABLED=true` is optional and off by default. Turn it on only when you also want scheduled posts. Leave `X_REPLY_LINKS=false`.
+
+Do not run a second worker. `LENS_ROLE=all` already starts one. A separate worker service is only for splitting them later: same variables, `LENS_ROLE=worker`, and no public domain.
 
 ## Fly.io
 

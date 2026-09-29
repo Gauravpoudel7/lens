@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluateRisk, snapshotToRuleInput, type RuleInput } from "./engine.js";
 import { FIXTURES, materializeFixture } from "../providers/mock.js";
+import { STAKE_POOL_MINTS, STAKE_POOL_PROGRAMS } from "./stake-pools.js";
 
 const noClaims = { burned: false, locked: false };
 
@@ -31,6 +32,43 @@ describe("risk rules", () => {
 
   it("treats one danger sign as MEDIUM", () => {
     const report = evaluateRisk(base({ mintAuthorityActive: true }));
+    expect(report.level).toBe("MEDIUM");
+    expect(report.facts.find((fact) => fact.id === "mint_authority")?.signal).toBe("danger");
+  });
+
+  it("does not treat a known stake-pool mint authority as danger", () => {
+    const [jitoMint] = Object.keys(STAKE_POOL_MINTS);
+    const report = evaluateRisk(base({ mint: jitoMint, mintAuthorityActive: true }));
+    expect(report.level).toBe("LOW");
+    expect(report.dangerCount).toBe(0);
+    const fact = report.facts.find((item) => item.id === "mint_authority");
+    expect(fact?.signal).toBe("good");
+    expect(fact?.short.toLowerCase()).toContain("stake-pool token");
+    expect(fact?.text.toLowerCase()).toContain("stake-pool token");
+  });
+
+  it("treats mint authority held by a stake-pool program as a stake-pool token", () => {
+    const [program] = STAKE_POOL_PROGRAMS;
+    const report = evaluateRisk(
+      base({
+        mint: "NotAListedMint111111111111111111111111111",
+        mintAuthority: program,
+        mintAuthorityActive: true,
+      }),
+    );
+    expect(report.level).toBe("LOW");
+    expect(report.facts.find((fact) => fact.id === "mint_authority")?.short.toLowerCase()).toContain(
+      "stake-pool token",
+    );
+  });
+
+  it("still flags mint authority on a token that only copies a stake-pool ticker", () => {
+    const report = evaluateRisk(
+      base({
+        mint: "FakeJitoMint11111111111111111111111111111",
+        mintAuthorityActive: true,
+      }),
+    );
     expect(report.level).toBe("MEDIUM");
     expect(report.facts.find((fact) => fact.id === "mint_authority")?.signal).toBe("danger");
   });

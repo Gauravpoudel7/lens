@@ -1,4 +1,5 @@
 import type { Claims, Fact, RiskLevel, RiskReport, Signal, TokenLinks, TokenSnapshot } from "../types.js";
+import { isStakePoolToken } from "./stake-pools.js";
 import {
   AGE_CAUTION_HOURS,
   AGE_DANGER_HOURS,
@@ -26,6 +27,10 @@ export interface RuleInput {
   creatorSoldPct: number | null;
   creatorBalancePct: number | null;
   mintAuthorityActive: boolean | null;
+  /** Mint address. Used only to recognize known stake-pool receipt tokens. */
+  mint?: string | null;
+  /** Mint authority pubkey, when the chain read returned one. */
+  mintAuthority?: string | null;
   freezeAuthorityActive: boolean | null;
   sniperPct: number | null;
   burnedPct: number | null;
@@ -211,6 +216,14 @@ function mintAuthority(input: RuleInput): DraftFact {
     );
   }
   if (input.mintAuthorityActive) {
+    if (isStakePoolToken(input.mint, input.mintAuthority)) {
+      return draft(
+        "mint_authority",
+        "good",
+        "This is a stake-pool token. Mint authority stays on so the pool can issue receipt tokens.",
+        "Stake-pool token.",
+      );
+    }
     return draft(
       "mint_authority",
       "danger",
@@ -402,6 +415,8 @@ export function snapshotToRuleInput(snapshot: TokenSnapshot, claimsInput: Claims
     creatorSoldPct: snapshot.creatorSoldPct,
     creatorBalancePct: snapshot.creatorBalancePct,
     mintAuthorityActive: snapshot.mintAuthorityActive,
+    mint: snapshot.mint,
+    mintAuthority: snapshot.mintAuthority ?? null,
     freezeAuthorityActive: snapshot.freezeAuthorityActive,
     sniperPct: snapshot.sniperPct,
     burnedPct: snapshot.burnedPct,

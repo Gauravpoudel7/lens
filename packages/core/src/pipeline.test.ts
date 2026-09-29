@@ -13,7 +13,10 @@ import { scoreDueChecks } from "./outcomes.js";
 import { MockXClient } from "./x/mock.js";
 import type { XPost } from "./x/types.js";
 
-function deps(rateLimit = 5): { rt: LensDeps; x: MockXClient; provider: MockTokenDataProvider; store: MemoryStore } {
+function deps(
+  rateLimit = 5,
+  extra: Record<string, string> = {},
+): { rt: LensDeps; x: MockXClient; provider: MockTokenDataProvider; store: MemoryStore } {
   const store = new MemoryStore();
   const provider = new MockTokenDataProvider();
   const x = new MockXClient();
@@ -23,6 +26,7 @@ function deps(rateLimit = 5): { rt: LensDeps; x: MockXClient; provider: MockToke
     LLM_MODE: "template",
     PUBLIC_BASE_URL: "http://127.0.0.1:3847",
     RATE_LIMIT_PER_USER_PER_DAY: String(rateLimit),
+    ...extra,
     OUTCOME_WINDOW_DAYS: "7",
     SHARP_DROP_PCT: "-30",
     CALL_WIN_PCT: "20",
@@ -142,6 +146,29 @@ describe("mention pipeline", () => {
     expect(limited.status).toBe("rate_limited");
     expect([...store.checks.values()]).toHaveLength(1);
     expect(x.replies).toHaveLength(1);
+  });
+
+  it("stops replying after the bot daily cap, including a Pro account", async () => {
+    const { rt, x, store } = deps(5, { MAX_X_REPLIES_PER_DAY: "1" });
+    const pro = await store.upsertUser({ xHandle: "pro_user", xUserId: "user_2" });
+    await store.setProUntil(pro.id, "2099-01-01T00:00:00.000Z");
+    const first = await processMention(rt, {
+      id: "mention_1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: `@askLens ${FIXTURES.danger.mint}`,
+    });
+    const second = await processMention(rt, {
+      id: "mention_2",
+      authorId: "user_2",
+      authorUsername: "pro_user",
+      text: `@askLens ${FIXTURES.safe.mint}`,
+    });
+    expect(first.status).toBe("replied");
+    expect(second.status).toBe("rate_limited");
+    expect(x.replies).toHaveLength(1);
+    const mention = await store.getMention("mention_2");
+    expect(mention?.skipReason).toBe("bot daily reply cap");
   });
 
   it("lets a Pro account keep asking after the free daily cap", async () => {

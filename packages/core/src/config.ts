@@ -60,6 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     xOauth2RefreshToken: clean(env.X_OAUTH2_REFRESH_TOKEN),
     xOauth2RedirectUri: clean(env.X_OAUTH2_REDIRECT_URI) ?? "http://127.0.0.1:4391/callback",
     rateLimitPerUserPerDay: num(env.RATE_LIMIT_PER_USER_PER_DAY, 5),
+    maxXRepliesPerDay: Math.max(0, Math.floor(num(env.MAX_X_REPLIES_PER_DAY, 50))),
     outcomeWindowDays: num(env.OUTCOME_WINDOW_DAYS, 7),
     sharpDropPct: num(env.SHARP_DROP_PCT, -30),
     callWinPct: num(env.CALL_WIN_PCT, 20),

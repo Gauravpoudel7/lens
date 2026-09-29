@@ -112,6 +112,8 @@ Chain fields override RugCheck for authorities and for top-10 when the RPC read 
 
 Lock heuristic (`interpretLpLock`): a majority of liquidity locked, or a classic LP token at least 80% locked, is locked. A classic LP with almost nothing locked is unlocked. Concentrated-liquidity pools (no LP mint) with sizeable liquidity stay `unknown`, because “unlocked” would be the wrong fact. Expired locker dates are ignored.
 
+Known stake-pool mints in `risk/stake-pools.ts` (JitoSOL, mSOL, bSOL, jupSOL, INF) keep an enabled mint authority from counting as danger. The fact short text is “Stake-pool token.” The same waiver applies when the mint authority pubkey is the SPL, Marinade, or Sanctum stake-pool program. Matching is by mint address, not by symbol.
+
 ## Reply writer
 
 `createReplyWriter` returns the template when `LLM_MODE=template` or no API key is set. Otherwise it calls `POST {LLM_BASE_URL}/chat/completions` with a system prompt that forbids new facts, buy/sell advice, and accusations. The response is dropped if it contains a different risk level, still says “scam” after replacement, or runs past 500 characters. The template is the fallback.
@@ -137,6 +139,10 @@ Token data is mainnet. Proofs are whichever cluster `SOLANA_CLUSTER` selects. Th
 The live client resolves the bot user id once, when it is constructed. `X_BOT_USER_ID` wins. Otherwise Lens reads the `x_bot_user_id` cursor, and only if that is empty calls `GET /2/users/me`, saves the id, and logs `Set X_BOT_USER_ID=...`. Mention polls reuse the in-memory id.
 
 Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUntil` is in the future. Pro is set only by `confirmUsdcCheckout` after a matching USDC balance increase on the treasury, with the checkout reference present in the transaction account keys. The counter is not incremented for Pro.
+
+`MAX_X_REPLIES_PER_DAY` (default 50) is a separate counter for the bot, stored as a `UsageDay` row with id `lens:x_replies`. When it is reached, the worker does not prove or reply. Pro does not bypass it. Outbound posts still use `OUTBOUND_DAILY_CAP`.
+
+`npm run doctor` prints a ready / not-ready list and does not post. `npm run doctor -- --x` adds one `GET /2/users/me`. That flag does not refresh OAuth tokens.
 
 `runOutboundCycle` does nothing unless `OUTBOUND_ENABLED=true`. It posts configured mints first, then DexScreener candidates when `OUTBOUND_DISCOVER=true`. Discovered MEDIUM tokens are not posted. Each successful post counts toward `OUTBOUND_DAILY_CAP`. A mint with a call, warning, or note in the last 20 hours is skipped.
 

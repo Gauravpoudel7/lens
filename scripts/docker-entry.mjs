@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,24 @@ if (schema.endsWith("schema.postgres.prisma")) {
 execSync(`npx prisma db push --schema "${schema}" --skip-generate`, { stdio: "inherit", env: process.env });
 
 const role = process.env.LENS_ROLE ?? "web";
+if (role === "all") {
+  const worker = spawn("npx", ["tsx", "apps/worker/src/index.ts"], {
+    stdio: "inherit",
+    env: process.env,
+  });
+  worker.on("exit", (code, signal) => {
+    console.error(
+      JSON.stringify({
+        time: new Date().toISOString(),
+        level: "error",
+        service: "lens",
+        msg: "worker stopped",
+        code,
+        signal,
+      }),
+    );
+  });
+}
 if (role === "worker") {
   execSync("npx tsx apps/worker/src/index.ts", { stdio: "inherit", env: process.env });
 } else {

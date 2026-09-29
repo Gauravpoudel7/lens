@@ -9,6 +9,7 @@ describe("loadConfig product defaults", () => {
     expect(config.pollIntervalMs).toBe(180_000);
     expect(config.jupiterBaseUrl).toBe("https://api.jup.ag");
     expect(config.jupiterApiKey).toBeUndefined();
+    expect(config.maxXRepliesPerDay).toBe(50);
     expect(jupiterApiKeyHeader(config.jupiterApiKey)).toEqual({});
   });
 

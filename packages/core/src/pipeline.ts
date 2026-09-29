@@ -51,6 +51,19 @@ export type ProcessResult =
 
 const TERMINAL = new Set<MentionRecord["status"]>(["replied", "reply_failed", "rate_limited"]);
 
+/** UsageDay key for the bot-wide reply counter. Not an X user id. */
+export const X_REPLY_COUNTER_ID = "lens:x_replies";
+
+export async function botRepliesUsedToday(deps: LensDeps, now = new Date()): Promise<number> {
+  return deps.store.getDailyCount(X_REPLY_COUNTER_ID, utcDay(now));
+}
+
+async function botReplyBudgetOpen(deps: LensDeps, now = new Date()): Promise<boolean> {
+  const cap = deps.config.maxXRepliesPerDay;
+  if (cap <= 0) return false;
+  return (await botRepliesUsedToday(deps, now)) < cap;
+}
+
 export async function processMention(deps: LensDeps, incoming: IncomingMention): Promise<ProcessResult> {
   const existing = await deps.store.getMention(incoming.id);
   if (existing && TERMINAL.has(existing.status)) {
@@ -83,6 +96,15 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
         });
         return { status: "rate_limited", checkId: null };
       }
+    }
+
+    if (!(await botReplyBudgetOpen(deps))) {
+      await deps.store.updateMention(incoming.id, {
+        status: "rate_limited",
+        skipReason: "bot daily reply cap",
+      });
+      log("bot daily reply cap reached", { cap: deps.config.maxXRepliesPerDay });
+      return { status: "rate_limited", checkId: null };
     }
 
     let parentText = incoming.parentText ?? null;
@@ -172,6 +194,7 @@ async function finishReply(
     if (!(await authorIsPro(deps, incoming.authorId, incoming.authorUsername))) {
       await deps.store.incrementDailyCount(incoming.authorId, utcDay(new Date()));
     }
+    await deps.store.incrementDailyCount(X_REPLY_COUNTER_ID, utcDay(new Date()));
     await queueWarningAlerts(deps, check);
     log(`${cached ? "cached reply" : "replied"} ${check.tokenSymbol} ${check.riskLevel} ${check.id}`);
     return {

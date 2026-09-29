@@ -39,7 +39,7 @@ Same run, `DATA_MODE=live`, Helius for mainnet RPC, DexScreener and RugCheck. Re
 | Token | Mint | Level | What the rules used |
 | --- | --- | --- | --- |
 | Bonk | `DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263` | LOW | About 1379 days old. Liquidity about $413k. Top 10 about 38.6%. Mint and freeze off. Creator sells unknown. Report `/r/HMTjmL8xgt`. |
-| JitoSOL | `J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn` | MEDIUM | About 1402 days old. Liquidity about $6.8M. Top 10 about 33%. Mint authority on. Freeze off. Report `/r/rYgW6ZpPWg`. |
+| JitoSOL | `J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn` | MEDIUM | About 1402 days old. Liquidity about $6.8M. Top 10 about 33%. Mint authority on. Freeze off. Report `/r/rYgW6ZpPWg`. That MEDIUM was this run’s rules. Known stake-pool mints no longer count that mint authority as danger. |
 | JUP | `JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN` | LOW | About 974 days old. Liquidity about $2.0M. Top 10 about 66% (caution). Mint and freeze off. Report `/r/9dei7Uz7Cy`. |
 | Pillheads | `CQ6hoX3mbM7yHwHeGYSdLutQYVrrPaRAWEgY6GeAmMKH` | HIGH | DexScreener latest profile. About 1 hour old. Liquidity about $43k. Top 10 about 86%. Mint and freeze off. Report `/r/SEWKTWDVEW`. |
 | XMR20 | `Cy5TzDyJ4mo6MBAbpwUcAgdfNiXYKrYUPrvhPGVU6XMR` | MEDIUM | DexScreener latest profile. About 1 hour old. Liquidity about $24k. Top 10 about 46%. Mint and freeze off. Report `/r/CCvCbRgSpp`. |
@@ -109,6 +109,9 @@ The scorecard banner stays up while data or proof mode is mock.
 - Two workers can double-post. Run one worker.
 - Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.
 - Replies aim for 280 characters. The policy cap is 500. Default X copy has no URL. Set `X_REPLY_LINKS=true` to include the report link again.
+- `MAX_X_REPLIES_PER_DAY` defaults to 50. After that the worker stops replying until the next UTC day. Pro does not bypass it.
+- `npm run doctor` is the pre-live checklist. It does not post. `--x` adds one `users/me` read and does not refresh tokens.
+- Known stake-pool mints (JitoSOL, mSOL, bSOL, jupSOL, INF) note “stake-pool token” instead of treating an enabled mint authority as danger.
 - Mention polling defaults to every 180 seconds (`POLL_INTERVAL_MS`).
 - Discovery posts a token only when the rules say HIGH or LOW. A DexScreener outage logs and posts nothing new.
 - Live X posts and DMs were not sent. Mention reads and app-only reads return HTTP 402 until the X app has credits. A failed DM is stored as `failed` and is not retried forever.

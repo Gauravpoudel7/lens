@@ -45,6 +45,7 @@ export interface TokenSnapshot {
   creatorSoldPct: number | null;
   creatorBalancePct: number | null;
   mintAuthorityActive: boolean | null;
+  mintAuthority?: string | null;
   freezeAuthorityActive: boolean | null;
   sniperPct: number | null;
   burnedPct: number | null;
@@ -163,6 +164,7 @@ export interface LensConfig {
   xOauth2RefreshToken?: string;
   xOauth2RedirectUri: string;
   rateLimitPerUserPerDay: number;
+  maxXRepliesPerDay: number;
   outcomeWindowDays: number;
   sharpDropPct: number;
   callWinPct: number;

@@ -38,6 +38,7 @@ npm test
 | `npm run discover` | One outbound pass. No-op unless `OUTBOUND_ENABLED=true` |
 | `npm run live:sample` | Read BONK and one current pump.fun token from mainnet |
 | `npm run x:oauth2-login` | Browser PKCE login that saves X OAuth 2.0 user tokens |
+| `npm run doctor` | Check config before going live. No posts. Add `-- --x` for one `users/me` read |
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
@@ -88,10 +89,11 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `X_OAUTH2_ACCESS_TOKEN`, `X_OAUTH2_REFRESH_TOKEN` | empty | Bootstrap tokens. After a refresh, the database row is the one that works |
 | `X_OAUTH2_REDIRECT_URI` | `http://127.0.0.1:4391/callback` | Must match the callback URL on the X app |
 | `X_BEARER_TOKEN` | empty | Optional app-only read of a parent post. Cannot post or send a DM |
-| `X_BOT_USER_ID` | empty | Optional. If empty, the worker calls `/2/users/me` once at startup, caches the id, and logs a hint to set this |
+| `X_BOT_USER_ID` | empty | Optional at runtime. If empty, the worker calls `/2/users/me` once at startup, caches the id, and logs a hint to set this. `npm run doctor` wants it set before go-live |
 | `X_REPLY_LINKS` | `false` | `true` puts `Report: <url>` back in replies, outbound posts, and warning DMs. Off by default because X bills a URL much higher |
 | `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
-| `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day |
+| `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day. Pro accounts skip this |
+| `MAX_X_REPLIES_PER_DAY` | `50` | Bot-wide replies per UTC day. The worker stops replying when it is reached. Pro does not skip it |
 | `CHECK_API_LIMIT_PER_HOUR` | `30` | Manual check form, per IP, per process |
 | `OUTCOME_WINDOW_DAYS` | `7` | How long before a check is scored |
 | `SHARP_DROP_PCT` | `-30` | HIGH is right if price change is at or below this |
@@ -133,6 +135,8 @@ The level is computed in `packages/core/src/risk/engine.ts`. Danger is worth 3, 
 - **LOW** otherwise.
 
 Thresholds: age under 24 hours is danger, under 7 days is caution. Liquidity under $10k is danger (caution if it is locked). $10k–$50k is caution. $50k+ and unlocked is caution. Top 10 holders at 70%+ is danger, 50%+ is caution. Creator sold 40%+ is danger, 10%+ is caution. Mint or freeze authority still on is danger. Linked launch wallets at 30%+ is danger, 15%+ is caution. A “burned” or “locked” claim that the chain does not support is danger.
+
+Known stake-pool receipt mints (JitoSOL, mSOL, bSOL, jupSOL, INF) are matched by mint address. An enabled mint authority on those mints, or a mint authority that is a stake-pool program, is noted as “stake-pool token” and is not a danger sign. A different mint that only copies the ticker is still scored normally.
 
 Unknown creator sells do not count as danger. The fact says the sells could not be verified.
 

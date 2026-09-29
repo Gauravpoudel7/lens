@@ -175,6 +175,7 @@ export class LiveTokenDataProvider implements TokenDataProvider {
         decimals: parsed.decimals,
         supply: parsed.supply,
         mintAuthorityActive: parsed.mintAuthority != null,
+        mintAuthority: parsed.mintAuthority,
         freezeAuthorityActive: parsed.freezeAuthority != null,
         top10HolderPct,
         burnedPct,

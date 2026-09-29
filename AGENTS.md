@@ -30,7 +30,7 @@ The app is http://127.0.0.1:3847. `npm run demo` forces mock mode. Do not point 
 
 | Task | Start here |
 | --- | --- |
-| Threshold or a new rule | `packages/core/src/risk/engine.ts` and `thresholds.ts`. Add a test in `engine.test.ts`. |
+| Threshold or a new rule | `packages/core/src/risk/engine.ts` and `thresholds.ts`. Stake-pool mint exceptions live in `risk/stake-pools.ts`. Add a test in `engine.test.ts`. |
 | A new data source | Implement `TokenDataProvider` or extend `LiveTokenDataProvider` and the parsers in `providers/parse.ts`. Keep RPC and HTTP behind that interface. Add a parser test with a fixture payload, not a live call. |
 | Reply wording | `packages/core/src/reply/policy.ts`. Keep the template under 280 characters when you can. X replies omit URLs unless `X_REPLY_LINKS=true`. The default closer is `Full report on our scorecard.` |
 | Proof format | `packages/core/src/proof/hash.ts`. Bump the memo prefix (`lens:v2`) if the format changes, and keep v1 verify working. |
