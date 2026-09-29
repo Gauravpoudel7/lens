@@ -13,7 +13,7 @@ The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no 
 | Risk engine | `packages/core/src/risk/engine.ts` | Pure function. No network, no model. |
 | Reply writer | `packages/core/src/reply` | Template, or an OpenAI-compatible chat call. `enforceReplyPolicy` runs on both. |
 | Proof publisher | `packages/core/src/proof` | Hash, memo payload, mock store, Solana memo transaction, verify. |
-| X client | `packages/core/src/x` and `apps/worker/src/x-live.ts` | `XClient` interface, including `sendDm`. Mock is the default. Live uses `twitter-api-v2` and is constructed only by the worker. |
+| X client | `packages/core/src/x` and `apps/worker/src/x-live.ts` | `XClient` interface, including `sendDm`. Mock is the default. Live uses `twitter-api-v2` with OAuth 1.0a or OAuth 2.0 user context, and is constructed only by the worker. |
 | Store | `packages/core/src/store/types.ts`, Prisma in `packages/db` | Mentions, checks, proofs, outcomes, accounts, watches, payments, alerts, outbound cap, mock memos, poll cursor. |
 | Pipeline | `packages/core/src/pipeline.ts` | Mention handling, manual checks, outbound posts, daily cap. |
 | Pro billing | `packages/core/src/billing` | Solana Pay reference transfer. `PaymentRail` is the seam for a future card provider. |
@@ -81,6 +81,7 @@ Prisma (`prisma/schema.prisma`). The default provider is SQLite. A `postgresql:/
 - **Payment** — pending or paid USDC checkout, including the Solana Pay reference.
 - **Alert** — DM text for one user and one check. `queued` until an X user id exists, then `sent` or `failed`.
 - **OutboundDay** — how many calls and warnings were posted that UTC day.
+- **XOAuth2Token** — the current OAuth 2.0 access token, refresh token, and expiry. One row, id `oauth2`. A copy is also written to `data/x-oauth2.json`, which is gitignored. The newer `updatedAt` wins if the two copies differ.
 
 `MemoryStore` implements the same interface for tests.
 
@@ -137,7 +138,9 @@ Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUnti
 
 `runOutboundCycle` does nothing unless `OUTBOUND_ENABLED=true`. It posts configured mints first, then DexScreener candidates when `OUTBOUND_DISCOVER=true`. Discovered MEDIUM tokens are not posted. Each successful post counts toward `OUTBOUND_DAILY_CAP`. A mint with a call, warning, or note in the last 20 hours is skipped.
 
-The live client needs OAuth 1.0a user tokens. App-only bearer auth cannot post a reply or a DM. The web app does not construct the live client. Manual checks never post to X. Live DMs call `v2.sendDmToParticipant` and fail closed if X rejects them. Tests use `MockXClient.dms`.
+`X_AUTH_MODE=oauth1` (the default) uses OAuth 1.0a user tokens. `X_AUTH_MODE=oauth2` uses a confidential OAuth 2.0 user: client id, client secret, access token, and refresh token. Access tokens expire after two hours. Before a user-context call, and again after an HTTP 401, Lens posts `grant_type=refresh_token` to `https://api.x.com/2/oauth2/token` and saves the rotated refresh token in `XOAuth2Token` and `data/x-oauth2.json`. A saved row is preferred over the env refresh token, because X invalidates the previous refresh token. `npm run x:oauth2-login` runs the PKCE authorize flow on `http://127.0.0.1:4391/callback` when the refresh token is lost.
+
+`X_BEARER_TOKEN`, when set, is used only to read a parent post. App-only bearer auth cannot post a reply or a DM. The web app does not construct the live client. Manual checks never post to X. Live DMs call `v2.sendDmToParticipant` and fail closed if X rejects them. Tests use `MockXClient.dms` and a fake token endpoint. They do not call X.
 
 HTTP 429 and dropped connections retry with exponential backoff (`withRetry`, default 4 attempts). If `getTokenLargestAccounts` still fails, the mint and freeze authorities from `getAccountInfo` are kept and holder stats fall through to RugCheck.
 

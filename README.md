@@ -37,6 +37,7 @@ npm test
 | `npm run post -- --mint <address>` | Outbound post. HIGH becomes a warning, LOW a call, otherwise a note |
 | `npm run discover` | One outbound pass. No-op unless `OUTBOUND_ENABLED=true` |
 | `npm run live:sample` | Read BONK and one current pump.fun token from mainnet |
+| `npm run x:oauth2-login` | Browser PKCE login that saves X OAuth 2.0 user tokens |
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
@@ -81,7 +82,12 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `LLM_API_KEY` or `OPENAI_API_KEY` | empty | Reply wording only. No tools, no wallet |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible |
 | `LLM_MODEL` | `gpt-4o-mini` | Chat model |
+| `X_AUTH_MODE` | `oauth1` | `oauth2` for OAuth 2.0 user context, `oauth1` for the four keys below |
 | `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_SECRET` | empty | OAuth 1.0a user context for live posting |
+| `X_OAUTH2_CLIENT_ID`, `X_OAUTH2_CLIENT_SECRET` | empty | Confidential OAuth 2.0 client. Required when `X_AUTH_MODE=oauth2` |
+| `X_OAUTH2_ACCESS_TOKEN`, `X_OAUTH2_REFRESH_TOKEN` | empty | Bootstrap tokens. After a refresh, the database row is the one that works |
+| `X_OAUTH2_REDIRECT_URI` | `http://127.0.0.1:4391/callback` | Must match the callback URL on the X app |
+| `X_BEARER_TOKEN` | empty | Optional app-only read of a parent post. Cannot post or send a DM |
 | `X_BOT_USER_ID` | empty | Optional. Otherwise the worker calls `/2/users/me` |
 | `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
 | `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day |
@@ -111,7 +117,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 - **Birdeye** only if you want their security payload (creator sold percent, when the API returns it).
 - **A devnet keypair with SOL** for on-chain proofs. Run `npm run setup:devnet`. The JSON array stays in `data/`, which is gitignored. If the public faucet returns 429, fund the printed pubkey from [faucet.solana.com](https://faucet.solana.com) (Devnet, GitHub login) and run the script again. Set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`. Then `npm run demo:devnet`.
 - **`PRO_TREASURY_WALLET`** if you want the Pro page to create a Solana Pay link. No card processor is wired up. The card rail is an interface that returns “not configured”.
-- **X API user-context tokens** (key, secret, access token, access secret) and `X_MODE=live` to actually read mentions and post.
+- **X user tokens** and `X_MODE=live` to read mentions and post. OAuth 2.0: set `X_AUTH_MODE=oauth2`, the client id and secret, then `npm run x:oauth2-login`. OAuth 1.0a: set the API key, API secret, access token, and access secret. `docs/KEYS.md` has the clicks.
 - **An OpenAI-compatible key** if you want the model to phrase replies. Without it, the template writer is used. The model never chooses the risk level.
 
 Token reads stay on mainnet even when proofs go to devnet.

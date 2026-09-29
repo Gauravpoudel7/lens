@@ -8,7 +8,7 @@ Updated after Pro, discovery, deploy packaging, and a live mainnet read. “Done
 | --- | --- | --- | --- | --- |
 | 1 | Token calls | Must | Done | `publishOutbound` proves, then posts. LOW is a call. The worker runs `runOutboundCycle` when `OUTBOUND_ENABLED=true`. `OUTBOUND_DISCOVER=true` adds DexScreener profiles and boosts. Daily cap is `OUTBOUND_DAILY_CAP` (default 8). MEDIUM discoveries are not posted. |
 | 2 | Warnings | Must | Done | HIGH outbound posts are kind `warning`. The same proved reply is what gets posted. |
-| 3 | @askLens replies | Must | Done in mock, live untested | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. Live X client is in `apps/worker/src/x-live.ts`. It has not been run against the paid API here. |
+| 3 | @askLens replies | Must | Done in mock, live untested | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. Live X client supports OAuth 1.0a and OAuth 2.0 user context (`X_AUTH_MODE`). OAuth 2.0 refresh is implemented and tested against a fake token endpoint. It has not been run against X from this environment. |
 | 4 | On-chain proof | Must | Publisher done, no devnet signature yet | Mock is still the default for `npm run demo`. `PROOF_MODE=solana` builds and sends a memo. This environment could not fund the keypair, so no explorer signature is recorded below. |
 | 5 | Public scorecard | Must | Done | Home, report, win rate, label accuracy, Sharpe after two scored calls. |
 | 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. |
@@ -65,7 +65,7 @@ To land the memo: send devnet SOL to `3qtAA6DHz3ufStouNS92k7sCehiuB89S3rzGWb1ZVA
 | Token facts | Fixtures `$DANGER`, `$SAFE`, `$MID`, plus synthetic mints | DexScreener, mainnet RPC, RugCheck, optional Birdeye, Jupiter |
 | Reply text | Template | Template, or LLM if a key is set |
 | Proof | `mock_` signature in `ChainMemo` | Memo on `SOLANA_CLUSTER` |
-| X posts and DMs | `MockXClient` | `twitter-api-v2` user context. DMs need DM permission on the app |
+| X posts and DMs | `MockXClient` | `twitter-api-v2` with OAuth 1.0a, or OAuth 2.0 user context. Refresh tokens are saved in `XOAuth2Token` and `data/x-oauth2.json`. DMs need DM permission on the app |
 | Pro payment | Tests inject a fake chain | `getTransaction` on `PRO_RPC_URL` for a USDC balance increase |
 | Jupiter swap | Error string, no fake transaction | Lite swap API |
 | Card checkout | `createCardRail` throws | Not built |
@@ -85,7 +85,8 @@ The scorecard banner stays up while data or proof mode is mock.
 - Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.
 - Replies aim for 280 characters. The policy cap is 500.
 - Discovery posts a token only when the rules say HIGH or LOW. A DexScreener outage logs and posts nothing new.
-- Live X DMs were not sent from this environment. A failed DM is stored as `failed` and is not retried forever.
+- Live X posts and DMs were not sent from this environment. A failed DM is stored as `failed` and is not retried forever.
+- OAuth 2.0 access tokens expire after two hours. The worker refreshes them at `https://api.x.com/2/oauth2/token` and stores the new refresh token. `npm run x:oauth2-login` mints a new pair when that token is lost. No real X token was used here.
 - Lens does not hold user funds. The USDC payment goes to `PRO_TREASURY_WALLET`. The Blink asks the user’s wallet to sign a Jupiter swap.
 - Postgres uses the same models as SQLite, generated at process start. It is not a second hand-edited schema.
 

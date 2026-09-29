@@ -1,11 +1,25 @@
 import { TwitterApi } from "twitter-api-v2";
-import { loadConfig, type XClient, type XPost } from "@lens/core";
+import { OAuth2TokenManager, loadConfig, log, type XClient, type XPost } from "@lens/core";
+import { createPersistedOAuth2TokenStore } from "@lens/db";
 
-export function createLiveXClient(): XClient {
+const TWEET_FIELDS = ["author_id", "created_at", "text", "referenced_tweets"] as const;
+
+export async function createLiveXClient(): Promise<XClient> {
   const config = loadConfig();
+  const appClient = config.xBearerToken ? new TwitterApi(config.xBearerToken) : null;
+  if (config.xAuthMode === "oauth2") {
+    return oauth2Client(config, appClient);
+  }
+  return oauth1Client(config, appClient);
+}
+
+function oauth1Client(
+  config: ReturnType<typeof loadConfig>,
+  appClient: TwitterApi | null,
+): XClient {
   if (!config.xApiKey || !config.xApiSecret || !config.xAccessToken || !config.xAccessSecret) {
     throw new Error(
-      "X_MODE=live requires X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, and X_ACCESS_SECRET",
+      "X_MODE=live with X_AUTH_MODE=oauth1 requires X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, and X_ACCESS_SECRET",
     );
   }
   const client = new TwitterApi({
@@ -14,42 +28,116 @@ export function createLiveXClient(): XClient {
     accessToken: config.xAccessToken,
     accessSecret: config.xAccessSecret,
   });
+  return methods({
+    user: async () => client,
+    app: appClient,
+    botUserId: config.xBotUserId,
+    refreshOnUnauthorized: null,
+  });
+}
+
+async function oauth2Client(
+  config: ReturnType<typeof loadConfig>,
+  appClient: TwitterApi | null,
+): Promise<XClient> {
+  if (!config.xOauth2ClientId || !config.xOauth2ClientSecret) {
+    throw new Error(
+      "X_MODE=live with X_AUTH_MODE=oauth2 requires X_OAUTH2_CLIENT_ID and X_OAUTH2_CLIENT_SECRET",
+    );
+  }
+  const store = createPersistedOAuth2TokenStore();
+  const saved = await store.read();
+  if (!saved?.refreshToken && !config.xOauth2RefreshToken) {
+    throw new Error(
+      "X OAuth 2.0 needs X_OAUTH2_REFRESH_TOKEN, or a token already saved by npm run x:oauth2-login.",
+    );
+  }
+  const manager = new OAuth2TokenManager({
+    clientId: config.xOauth2ClientId,
+    clientSecret: config.xOauth2ClientSecret,
+    envRefreshToken: config.xOauth2RefreshToken,
+    store,
+  });
+  log("x oauth2 user context", { bearerRead: Boolean(appClient) });
+  return methods({
+    user: async () => new TwitterApi(await manager.getAccessToken()),
+    app: appClient,
+    botUserId: config.xBotUserId,
+    refreshOnUnauthorized: () => manager.getAccessToken(true),
+  });
+}
+
+function methods(input: {
+  user: () => Promise<TwitterApi>;
+  app: TwitterApi | null;
+  botUserId?: string;
+  refreshOnUnauthorized: (() => Promise<string>) | null;
+}): XClient {
+  const call = async <T>(fn: (client: TwitterApi) => Promise<T>): Promise<T> => {
+    try {
+      return await fn(await input.user());
+    } catch (err) {
+      if (!input.refreshOnUnauthorized || !isUnauthorized(err)) throw err;
+      await input.refreshOnUnauthorized();
+      return fn(await input.user());
+    }
+  };
 
   return {
     async listMentions(sinceId) {
-      const userId = config.xBotUserId ?? (await client.v2.me()).data.id;
-      const timeline = await client.v2.userMentionTimeline(userId, {
-        since_id: sinceId,
-        max_results: 10,
-        "tweet.fields": ["author_id", "created_at", "referenced_tweets", "text"],
-        expansions: ["author_id", "referenced_tweets.id"],
-        "user.fields": ["username"],
+      return call(async (client) => {
+        const userId = input.botUserId ?? (await client.v2.me()).data.id;
+        const timeline = await client.v2.userMentionTimeline(userId, {
+          since_id: sinceId,
+          max_results: 10,
+          "tweet.fields": [...TWEET_FIELDS],
+          expansions: ["author_id", "referenced_tweets.id"],
+          "user.fields": ["username"],
+        });
+        const users = new Map((timeline.includes?.users ?? []).map((user) => [user.id, user.username]));
+        return (timeline.tweets ?? []).map((tweet) => toPost(tweet, users));
       });
-      const users = new Map((timeline.includes?.users ?? []).map((user) => [user.id, user.username]));
-      return (timeline.tweets ?? []).map((tweet) => toPost(tweet, users));
     },
     async getPost(id) {
-      const tweet = await client.v2.singleTweet(id, {
-        "tweet.fields": ["author_id", "created_at", "text", "referenced_tweets"],
-        expansions: ["author_id"],
-        "user.fields": ["username"],
-      });
-      const users = new Map((tweet.includes?.users ?? []).map((user) => [user.id, user.username]));
-      return toPost(tweet.data, users);
+      const read = async (client: TwitterApi) => {
+        const tweet = await client.v2.singleTweet(id, {
+          "tweet.fields": [...TWEET_FIELDS],
+          expansions: ["author_id"],
+          "user.fields": ["username"],
+        });
+        const users = new Map((tweet.includes?.users ?? []).map((user) => [user.id, user.username]));
+        return toPost(tweet.data, users);
+      };
+      if (input.app) {
+        try {
+          return await read(input.app);
+        } catch (err) {
+          if (!isUnauthorized(err) && !isForbidden(err)) throw err;
+        }
+      }
+      return call(read);
     },
     async reply({ inReplyToId, text }) {
-      const result = await client.v2.reply(text, inReplyToId);
+      const result = await call((client) => client.v2.reply(text, inReplyToId));
       return { id: result.data.id };
     },
     async post(text) {
-      const result = await client.v2.tweet(text);
+      const result = await call((client) => client.v2.tweet(text));
       return { id: result.data.id };
     },
     async sendDm({ recipientId, text }) {
-      const result = await client.v2.sendDmToParticipant(recipientId, { text });
+      const result = await call((client) => client.v2.sendDmToParticipant(recipientId, { text }));
       return { id: result.dm_event_id };
     },
   };
+}
+
+function isUnauthorized(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: number }).code === 401;
+}
+
+function isForbidden(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: number }).code === 403;
 }
 
 function toPost(

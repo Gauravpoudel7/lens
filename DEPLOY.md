@@ -46,7 +46,7 @@ Change the Postgres password before anyone else can reach port 5432. The compose
    - `SOLANA_CLUSTER=devnet`
    - `SOLANA_KEYPAIR` = the JSON array from `data/devnet-keypair.json` (one line). Prefer this over a file, because the container disk is ephemeral.
    - `HELIUS_API_KEY` when you have one
-   - `X_MODE=live` plus the four X user tokens when you want the bot to post
+   - `X_MODE=live` when you want the bot to post. OAuth 2.0: `X_AUTH_MODE=oauth2`, `X_OAUTH2_CLIENT_ID`, `X_OAUTH2_CLIENT_SECRET`, and `X_OAUTH2_REFRESH_TOKEN`. OAuth 1.0a: the four `X_API_*` / `X_ACCESS_*` keys and `X_AUTH_MODE=oauth1`.
    - `PRO_TREASURY_WALLET` when you want Pro checkout
 4. Settings → health check path `/api/health`. The container listens on 3847.
 5. Add a second service from the same repo and Dockerfile. Same variables, except `LENS_ROLE=worker` and no public port. Give it `OUTBOUND_ENABLED=true` and `OUTBOUND_DISCOVER=true` only when you want scheduled calls. `OUTBOUND_DAILY_CAP` defaults to 8.
@@ -69,15 +69,17 @@ fly secrets set \
   SOLANA_KEYPAIR='[ ...json array... ]' \
   HELIUS_API_KEY=... \
   X_MODE=live \
-  X_API_KEY=... \
-  X_API_SECRET=... \
-  X_ACCESS_TOKEN=... \
-  X_ACCESS_SECRET=...
+  X_AUTH_MODE=oauth2 \
+  X_OAUTH2_CLIENT_ID=... \
+  X_OAUTH2_CLIENT_SECRET=... \
+  X_OAUTH2_REFRESH_TOKEN=...
 fly deploy
 fly scale count web=1 worker=1
 ```
 
 `fly.toml` points HTTP checks at `/api/health` and does not stop the web machine when idle, so the scorecard stays up. Confirm the app name in `fly.toml` before the first deploy.
+
+OAuth 2.0 refresh tokens rotate. The worker writes the new pair into the database, so web and worker must share that database. The `X_OAUTH2_REFRESH_TOKEN` secret is only the first seed. For OAuth 1.0a, set `X_AUTH_MODE=oauth1` and the four user-context keys instead of the OAuth 2.0 ones.
 
 ## Render
 

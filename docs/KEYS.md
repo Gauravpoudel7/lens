@@ -6,21 +6,48 @@ Lens runs with no keys. Add a key only for the part you want to turn on. Put eve
 
 You need this only if `X_MODE=live`. Mock mode does not call X.
 
-1. Open [https://developer.x.com](https://developer.x.com) and sign in with the X account that will be @askLens (or whatever handle you use).
-2. Sign up for a developer account. X asks what you are building. Say you are posting replies from a bot you operate.
-3. Create a project, then create an app inside that project.
-4. In the app's user authentication settings, turn on **OAuth 1.0a**. Set the app permissions to **Read and write**. If you want Pro warning DMs, also allow **Direct Messages**.
-5. Set a callback URL. `http://127.0.0.1:3847` is enough for local setup. X requires a URL even if you only generate tokens in the dashboard.
-6. Open **Keys and tokens**. Generate or copy:
+Lens can log in as the bot in two ways. Set `X_AUTH_MODE` to `oauth2` or `oauth1`. If you leave it out, Lens uses OAuth 1.0a.
+
+### OAuth 2.0 (user login, PKCE)
+
+Use this when the X developer portal gave you a client id and a client secret, not the four OAuth 1.0a keys. The access token dies after 2 hours. The refresh token is replaced every time Lens asks for a new access token. Lens saves the new pair in the database and in `data/x-oauth2.json`. That file is gitignored. Do not commit it.
+
+1. Open [https://developer.x.com](https://developer.x.com) and sign in with the X account that will post as the bot.
+2. Sign up for a developer account if you do not have one. Say you are posting replies from a bot you operate.
+3. Create a project, then an app inside it.
+4. Open the app's **User authentication settings**. Turn on **OAuth 2.0**. Choose a **confidential** client (a web app). That is what gives you a client secret. Permissions: **Read and write**. If you want Pro warning DMs, also allow **Direct messages**.
+5. Set the callback URL to `http://127.0.0.1:4391/callback`. If you change it, set the same value as `X_OAUTH2_REDIRECT_URI`.
+6. Allow these scopes: `tweet.read`, `tweet.write`, `users.read`, `dm.read`, `dm.write`, and `offline.access`. `offline.access` is the one that returns a refresh token. Without it, Lens cannot stay logged in.
+7. On the keys page, copy:
+   - Client ID → `X_OAUTH2_CLIENT_ID`
+   - Client Secret → `X_OAUTH2_CLIENT_SECRET`
+8. In `.env` set `X_MODE=live` and `X_AUTH_MODE=oauth2`.
+9. Run `npm run x:oauth2-login`. It prints a link. Open it, approve the app, and the script saves the tokens. You do not paste the access token or the refresh token into the chat. You can also paste them into `.env` as `X_OAUTH2_ACCESS_TOKEN` and `X_OAUTH2_REFRESH_TOKEN` if you already have them. The saved database row is used after the first refresh, because the old refresh token stops working.
+10. `X_BOT_USER_ID` is optional. If you leave it empty, the worker asks X who the token belongs to.
+
+If a refresh fails, or you lose the saved tokens, run `npm run x:oauth2-login` again. That writes a new pair over the old one.
+
+On a server, keep the database (Postgres, or the SQLite file on a disk that survives restarts). The env refresh token is only the first seed. After Lens refreshes, the database has the token that still works.
+
+### OAuth 1.0a
+
+Use this if the portal shows an API key and an access token secret instead.
+
+1. In user authentication settings, turn on **OAuth 1.0a**. Permissions: **Read and write**, plus **Direct messages** if you want DMs.
+2. Set any callback URL. `http://127.0.0.1:3847` is enough. X requires one even if you only generate tokens in the dashboard.
+3. Open **Keys and tokens**. Generate:
    - API Key → `X_API_KEY`
    - API Key Secret → `X_API_SECRET`
    - Access Token → `X_ACCESS_TOKEN`
    - Access Token Secret → `X_ACCESS_SECRET`
-7. The access token must belong to the bot user, not a random personal account, and it must be regenerated after you change the app permissions. An old read-only token cannot post.
-8. In `.env` set `X_MODE=live`. `X_BOT_USER_ID` is optional. If you leave it empty, the worker asks X who the token belongs to.
-9. `X_BEARER_TOKEN` is an app-only key. Lens does not use it to post. You can leave it empty.
+4. The access token must belong to the bot user. If you change permissions, generate the access token again. An old read-only token cannot post.
+5. In `.env` set `X_MODE=live` and `X_AUTH_MODE=oauth1` (or leave `X_AUTH_MODE` empty).
 
-Live DMs use the same user token and `sendDm`. X only delivers them if the app was granted DM access and the recipient can receive DMs from the bot. Tests use a fake client and do not call X.
+### App-only bearer token
+
+`X_BEARER_TOKEN` is optional. Lens can use it to read the parent post of a mention. It cannot post, reply, or send a DM. Leave it empty if you do not have one.
+
+Live DMs use the user token and `sendDm`. X only delivers them if the app was granted DM access and the recipient can receive DMs from the bot. Tests use a fake client and do not call X.
 
 ## Helius (mainnet token reads)
 

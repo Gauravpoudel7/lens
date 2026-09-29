@@ -148,12 +148,18 @@ export interface LensConfig {
   llmApiKey?: string;
   llmBaseUrl: string;
   llmModel: string;
+  xAuthMode: "oauth1" | "oauth2";
   xApiKey?: string;
   xApiSecret?: string;
   xAccessToken?: string;
   xAccessSecret?: string;
   xBearerToken?: string;
   xBotUserId?: string;
+  xOauth2ClientId?: string;
+  xOauth2ClientSecret?: string;
+  xOauth2AccessToken?: string;
+  xOauth2RefreshToken?: string;
+  xOauth2RedirectUri: string;
   rateLimitPerUserPerDay: number;
   outcomeWindowDays: number;
   sharpDropPct: number;

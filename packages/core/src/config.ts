@@ -14,6 +14,12 @@ function clean(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function xAuthMode(value: string | undefined): "oauth1" | "oauth2" {
+  const mode = clean(value)?.toLowerCase() ?? "oauth1";
+  if (mode === "oauth1" || mode === "oauth2") return mode;
+  throw new Error(`X_AUTH_MODE must be oauth1 or oauth2. Received "${mode}".`);
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
   const cluster = env.SOLANA_CLUSTER === "mainnet-beta" ? "mainnet-beta" : "devnet";
   const heliusApiKey = clean(env.HELIUS_API_KEY);
@@ -40,12 +46,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     llmApiKey: clean(env.LLM_API_KEY) ?? clean(env.OPENAI_API_KEY),
     llmBaseUrl: (env.LLM_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
     llmModel: env.LLM_MODEL?.trim() || "gpt-4o-mini",
+    xAuthMode: xAuthMode(env.X_AUTH_MODE),
     xApiKey: clean(env.X_API_KEY),
     xApiSecret: clean(env.X_API_SECRET),
     xAccessToken: clean(env.X_ACCESS_TOKEN),
     xAccessSecret: clean(env.X_ACCESS_SECRET),
     xBearerToken: clean(env.X_BEARER_TOKEN),
     xBotUserId: clean(env.X_BOT_USER_ID),
+    xOauth2ClientId: clean(env.X_OAUTH2_CLIENT_ID),
+    xOauth2ClientSecret: clean(env.X_OAUTH2_CLIENT_SECRET),
+    xOauth2AccessToken: clean(env.X_OAUTH2_ACCESS_TOKEN),
+    xOauth2RefreshToken: clean(env.X_OAUTH2_REFRESH_TOKEN),
+    xOauth2RedirectUri: clean(env.X_OAUTH2_REDIRECT_URI) ?? "http://127.0.0.1:4391/callback",
     rateLimitPerUserPerDay: num(env.RATE_LIMIT_PER_USER_PER_DAY, 5),
     outcomeWindowDays: num(env.OUTCOME_WINDOW_DAYS, 7),
     sharpDropPct: num(env.SHARP_DROP_PCT, -30),

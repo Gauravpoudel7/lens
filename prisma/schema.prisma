@@ -185,3 +185,13 @@ model OutboundDay {
   day   String @id
   count Int    @default(0)
 }
+
+// Rotated OAuth 2.0 user tokens. One row, id "oauth2".
+// The refresh token changes every refresh, so the database copy wins over .env.
+model XOAuth2Token {
+  id           String   @id
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  updatedAt    DateTime
+}
