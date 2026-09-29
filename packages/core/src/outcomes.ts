@@ -121,12 +121,16 @@ export async function scoreDueChecks(
   deps: {
     store: LensStore;
     provider: TokenDataProvider;
-    config: OutcomeThresholds;
+    config: {
+      sharpDropPct: number;
+      callWinPct: number;
+      outcomeWindowDays: number;
+    };
   },
   opts?: { now?: Date; windowDays?: number },
 ): Promise<number> {
   const now = opts?.now ?? new Date();
-  const windowDays = opts?.windowDays ?? deps.config.windowDays;
+  const windowDays = opts?.windowDays ?? deps.config.outcomeWindowDays;
   const cutoff = new Date(now.getTime() - windowDays * 86_400_000).toISOString();
   const due = await deps.store.listUnscored(cutoff);
   let scored = 0;
