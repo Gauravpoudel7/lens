@@ -25,11 +25,42 @@ export default async function ProPage() {
         kicker="Pro"
         title="Alerts when a coin you watch is high risk."
         lede="Free checks on X stop at a daily cap. Pro removes that cap for one X account and sends a DM when a watched mint comes back HIGH. The risk rules do not change."
-      />
+      >
+        <a
+          href="#checkout"
+          className="mt-6 inline-flex h-11 items-center rounded-full bg-accent px-5 text-sm font-semibold text-accent-ink"
+        >
+          Pay {price} USDC
+        </a>
+      </PageHeader>
 
       <section className="rise mt-10" style={{ animationDelay: "80ms" }}>
         <h2 className="font-serif text-3xl tracking-tight">Free and Pro</h2>
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-line">
+        <div className="mt-4 grid gap-3 md:hidden">
+          <PlanSummary
+            name="Free"
+            rows={[
+              ["Price", "$0"],
+              ["Checks on X", `${freeDaily} a day for your account`],
+              ["Checks on this site", `${hourly} an hour per IP`],
+              ["Watchlist", "Not included"],
+              ["Risk level", "The published rules"],
+              ["Bot-wide limit", `${botCap} replies a day, shared`],
+            ]}
+          />
+          <PlanSummary
+            name="Pro"
+            rows={[
+              ["Price", `${price} USDC every ${days} days`],
+              ["Checks on X", "No personal daily cap"],
+              ["Checks on this site", "The paying wallet skips that hourly limit"],
+              ["Watchlist", "DM when a watched mint is HIGH"],
+              ["Risk level", "The same rules. Paying does not change a level."],
+              ["Bot-wide limit", "The same shared limit. Pro does not skip it."],
+            ]}
+          />
+        </div>
+        <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-line md:block">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <caption className="sr-only">Free and Pro plans</caption>
             <thead className="border-b border-line text-xs uppercase tracking-[0.12em] text-faint">
@@ -64,7 +95,7 @@ export default async function ProPage() {
           </table>
         </div>
         <p className="mt-3 text-sm leading-6 text-faint">
-          The table reads the running configuration. Unset <code className="text-muted">PRO_PRICE_USDC</code> is 10
+          These figures read the running configuration. Unset <code className="text-muted">PRO_PRICE_USDC</code> is 10
           USDC, unset <code className="text-muted">PRO_PERIOD_DAYS</code> is 30 days, and unset{" "}
           <code className="text-muted">RATE_LIMIT_PER_USER_PER_DAY</code> is 5.
         </p>
@@ -97,7 +128,7 @@ export default async function ProPage() {
         </p>
       </section>
 
-      <section id="checkout" className="rise mt-12" style={{ animationDelay: "180ms" }}>
+      <section id="checkout" className="rise mt-12 scroll-mt-24" style={{ animationDelay: "180ms" }}>
         <h2 className="font-serif text-3xl tracking-tight">Pay with USDC</h2>
         <div className="mt-4 max-w-xl">
           <ProPanel
@@ -110,6 +141,22 @@ export default async function ProPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function PlanSummary({ name, rows }: { name: string; rows: Array<[string, string]> }) {
+  return (
+    <section className="rounded-2xl border border-line bg-panel p-4">
+      <h3 className="font-serif text-2xl tracking-tight">{name}</h3>
+      <dl className="mt-3 space-y-3">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-sm text-faint">{label}</dt>
+            <dd className="text-sm leading-6">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

@@ -53,6 +53,12 @@ export function ProPanel({
   const [pasted, setPasted] = useState(false);
 
   useEffect(() => {
+    if (phase === "edit" && !notice) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("checkout")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  }, [phase, notice]);
+
+  useEffect(() => {
     const url = session?.solanaPayUrl;
     if (!url) {
       setQr(null);
@@ -238,7 +244,10 @@ export function ProPanel({
             </Button>
             <CopyButton value={session.solanaPayUrl} label="Copy payment link" />
           </div>
-          <p className="break-all font-mono text-xs text-faint">{session.solanaPayUrl}</p>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted">Show the payment link</summary>
+            <p className="mt-2 break-all font-mono text-xs text-faint">{session.solanaPayUrl}</p>
+          </details>
           <div>
             <p className="text-sm text-muted">Reference</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
