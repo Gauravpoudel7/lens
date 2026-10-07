@@ -16,6 +16,21 @@ X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=t
 | 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. `actions.json` is served with CORS. X unfurling needs Dialect registry approval. |
 | 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer | Accounts by X handle and/or wallet, watchlist on `/account`, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. A missing reference, a short amount, or an expired unpaid link does not start Pro. Card rail exists and refuses checkout. |
 
+## Landing page, 2026-10-08
+
+`apps/landing` (`@lens/landing`, port 3848, `npm run dev:landing`) is a static marketing page. It does not call any API, wallet, or X. Links to the record, `/verify`, `/check`, and `/pro` use `NEXT_PUBLIC_APP_URL`. The handle is `NEXT_PUBLIC_X_HANDLE` (default `justasklens`).
+
+| Part | Status | Notes |
+| --- | --- | --- |
+| Sections, copy, motion | Done | Page-wide particle canvas (cursor vortex, still frame under reduced motion). Text without a card sits on a feathered dark plate (`.text-scrim`) so particles fade behind the words. Hero: Spline 3D sized from the column width, with a transparent margin on the left so the hands are not cropped when the robot turns, Lens mark beside it, poster fallback; the scene file is preloaded with the page, the camera starts at a mid shot so Spline’s own pull-back intro plays without cropping the arms, the robot sits vertically centered with its head level with the headline, and its head follows the cursor anywhere on the page. Background particles swirl only while the cursor moves. Then sources marquee, problem, features, how it works with the 8-check table, feed, verify demo, stats, sample posts, pricing, CTA, footer. No FAQ. Copy is kept short. Reduced motion shows static content and no 3D. |
+| Verify demo | Done | Client-side SHA-256 with `crypto.subtle`. Same `lens:v1` shape as `proof/hash.ts`, not imported from it. |
+| Feed examples | Illustrative | `$SAFE`, `$MID`, `$DANGER` fixtures, labeled on the page. Signatures are fake (`Ex1a…mpLe1`). |
+| Testimonials | Placeholder | Three sample posts in `apps/landing/content/placeholders.ts`, tagged on the page. The made-up usage numbers were removed; only real facts (8 checks, 3 levels, 0 edits, 5 free checks) are shown. |
+| Spline scene | Placeholder | The spec's demo robot scene. Swap for a Lens scene in `content/copy.ts`. |
+| Domain, docs, GitHub links | Not set | `NEXT_PUBLIC_SITE_URL`, footer `// TODO` links. |
+
+The hero headline is four fixed lines sized from its column (container query), checked at 320–1920px and at browser zoom 50–300% with no horizontal scroll. Checked on a production build: `next build` and `eslint` clean. Lighthouse mobile 94 / 100 / 100 / 100, desktop 99 / 100 / 96 / 100 (performance, accessibility, best practices, SEO). Best practices on desktop loses points for a THREE.TSL console error from the Spline runtime in headless Chrome without a GPU. No horizontal scroll at 375, 390, 768, 1024, 1440, or 1920 px.
+
 ## Live X replies, 2026-10-07
 
 Mention reads and replies ran live as @justasklens (`X_MODE=live`, OAuth 2.0, `X_REPLY_LINKS=false`). `DATA_MODE=live`. Proofs were `PROOF_MODE=solana` on devnet. The signer was `84kujKJFvEM1VeFFGCaNWr79fazi9ABoaxmcsS2oLT7S`. That secret is only in the local `.env`. It is not in git.

@@ -32,6 +32,7 @@ npm test
 | `npm run setup:devnet` | Create `data/devnet-keypair.json` if needed and request devnet SOL |
 | `npm run demo:devnet` | Same loop as the demo, but the memo is a real devnet transaction |
 | `npm run dev` | Scorecard and HTTP API on port 3847 |
+| `npm run dev:landing` | Marketing landing page on port 3848 (`apps/landing`). No API, wallet, or X calls |
 | `npm run worker` | Poll mentions, run the outbound job, score due checks |
 | `npm run worker:once` | Single poll |
 | `npm run post -- --mint <address>` | Outbound post. HIGH becomes a warning, LOW a call, otherwise a note |
@@ -52,6 +53,7 @@ The manual check form is at [http://127.0.0.1:3847/check](http://127.0.0.1:3847/
 packages/core    rules, resolver, reply writer, proof, providers, Pro, discovery
 packages/db      Prisma store and runtime wiring
 apps/web         Next.js scorecard, check API, verify API, Pro page, Blink
+apps/landing     Next.js marketing page (static, links to apps/web)
 apps/worker      mention poller, outbound job, live X client
 prisma/          schema (SQLite by default; Postgres is generated at startup)
 scripts/         demo, devnet proof, discovery, live sample

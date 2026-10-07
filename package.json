@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev": "tsx scripts/ensure-db.ts && npm run dev -w @lens/web",
+    "dev:landing": "npm run dev -w @lens/landing",
+    "build:landing": "npm run build -w @lens/landing",
     "start": "npm run start -w @lens/web",
     "build": "npm run build -w @lens/web",
     "worker": "tsx apps/worker/src/index.ts",
