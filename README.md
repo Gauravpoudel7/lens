@@ -6,23 +6,156 @@ LOW means no major red flags were found. It is not a prediction that the price w
 
 This repo is the hackathon MVP: the reply loop, the proof, the scorecard, and a Jupiter Blink that refuses to sell a buy button on HIGH-risk tokens.
 
-## Mock mode, no keys
+## Run it on a Mac
+
+Two apps live in this repo. The website (the scorecard) is `apps/web`. The marketing page is `apps/landing`. They use different ports, so you can run both at once.
+
+### What you need
+
+- Node.js 20 or newer. Next.js also accepts 18.18 and 19.8. Node 22 works. npm comes with Node.
+- Git, and a terminal. Use a second terminal when you want the landing page up at the same time.
+
+Check the versions:
+
+```bash
+node -v
+npm -v
+```
+
+### Install
+
+From the repo root:
 
 ```bash
 npm install
+```
+
+That installs every workspace, including the website and the landing page, and generates the Prisma client.
+
+### Settings
+
+Copy the example file. A missing `.env` is also fine: the defaults are mock mode and a local database.
+
+```bash
+cp .env.example .env
+```
+
+For a quick local run, leave these as they are in the example. You do not need a Helius key, a Solana keypair, or X keys.
+
+| Name | Quick local value |
+| --- | --- |
+| `DATA_MODE` | `mock` |
+| `PROOF_MODE` | `mock` |
+| `X_MODE` | `mock` |
+| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` |
+
+Live mode uses real mainnet reads, a devnet proof, and the X API. Set the names below in `.env`. Do not commit the file. The full list is in the environment table further down, and the clicks for each key are in [docs/KEYS.md](docs/KEYS.md).
+
+| Name | Live value |
+| --- | --- |
+| `DATA_MODE` | `live` |
+| `PROOF_MODE` | `solana` |
+| `X_MODE` | `live` |
+| `HELIUS_API_KEY` | your mainnet RPC key |
+| `SOLANA_KEYPAIR_PATH` | `data/devnet-keypair.json` after the devnet step below |
+| `PUBLIC_BASE_URL` | the public https URL of the website, when you want real links in posts |
+| `X_AUTH_MODE` | `oauth2` or `oauth1`, plus the matching X key names in `.env.example` |
+
+`LLM_MODE=template` keeps replies on the fixed template even if a model key is present.
+
+The landing page has its own optional file. The defaults already point at this Mac.
+
+```bash
+cp apps/landing/.env.example apps/landing/.env.local
+```
+
+Those names are `NEXT_PUBLIC_SITE_URL` (the landing page), `NEXT_PUBLIC_APP_URL` (the website), and `NEXT_PUBLIC_X_HANDLE`.
+
+### Database
+
+```bash
+npm run db:push
+```
+
+That creates the SQLite file `data/lens.db`. The file is gitignored. `npm run dev` and `npm run demo` create it too, if you skip this step. If `DATABASE_URL` starts with `postgres`, the same command updates Postgres instead.
+
+### Website
+
+```bash
 npm run demo
 npm run dev
 ```
 
-`npm run demo` forces mock mode even if `.env` says otherwise. It simulates one `@askLens` mention on the `$DANGER` fixture, proves the reply into the local record, posts an outbound `$SAFE` call, then scores both immediately (window of 0 days, using the fixture’s later price).
+`npm run demo` forces mock mode even if `.env` says otherwise. It simulates one mention on the `$DANGER` fixture, proves the reply, posts an outbound `$SAFE` call, and scores both immediately.
 
-Then open [the scorecard](http://127.0.0.1:3847). The dev server listens on port **3847**.
+Then open [http://127.0.0.1:3847](http://127.0.0.1:3847). Leave this terminal running.
 
-Run the tests:
+### Landing page
+
+In a second terminal, from the same repo root:
+
+```bash
+npm run dev:landing
+```
+
+Open [http://127.0.0.1:3848](http://127.0.0.1:3848). This page does not call an API, a wallet, or X. Its links go to the website on port 3847.
+
+### Worker
+
+The worker polls mentions, runs outbound posts, and scores old checks. In mock mode it does not call X.
+
+```bash
+npm run worker:once
+npm run worker
+```
+
+`worker:once` does a single pass and exits. `worker` keeps polling until you stop it.
+
+### Devnet proofs
+
+```bash
+npm run setup:devnet
+```
+
+This writes `data/devnet-keypair.json` (gitignored) and asks a public devnet faucet for SOL. If funding fails, the command exits with an error that starts with “Could not fund”. The log already printed the new pubkey. Fund that address from [faucet.solana.com](https://faucet.solana.com) (Devnet) and run the command again. A busy faucet often answers with HTTP 429.
+
+Then set `PROOF_MODE=solana` and `SOLANA_KEYPAIR_PATH=data/devnet-keypair.json`, and run:
+
+```bash
+npm run demo:devnet
+```
+
+Token reads stay on mainnet. Only the proof memo goes to devnet.
+
+### Tests and builds
 
 ```bash
 npm test
+npm run lint
+npm run typecheck
+npm run build
+npm run build:landing
 ```
+
+`npm run typecheck` covers the bot packages. The two build commands typecheck the website and the landing page.
+
+### If something will not start
+
+**Port already in use.** `npm run dev` needs port 3847. `npm run dev:landing` needs port 3848. If you see `EADDRINUSE`, a previous server is still running. Free the port, then start again:
+
+```bash
+lsof -ti :3847 | xargs kill
+lsof -ti :3848 | xargs kill
+```
+
+**`package-lock.json` changed after you switched branches.** Run `npm install` so `node_modules` matches the branch you checked out. If `git status` then shows `package-lock.json` and you did not add a package, put the committed lockfile back and install again:
+
+```bash
+git checkout -- package-lock.json
+npm install
+```
+
+Do not commit that drift.
 
 ## What each command does
 
@@ -43,6 +176,10 @@ npm test
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
+| `npm run lint` | Lint the website |
+| `npm run typecheck` | Typecheck the bot packages. The Next apps are typechecked by their builds |
+| `npm run build` | Production build of the website |
+| `npm run build:landing` | Production build of the landing page |
 | `npm run db:push` | Create or update the database. Postgres when `DATABASE_URL` starts with `postgres` |
 
 The manual check form is at [http://127.0.0.1:3847/check](http://127.0.0.1:3847/check). The three buttons fill in mock fixtures (`$DANGER`, `$SAFE`, `$MID`).
