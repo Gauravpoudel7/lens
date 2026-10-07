@@ -17,3 +17,4 @@ prisma/.generated
 tmp-scaffold
 .DS_Store
 apps/web/tsconfig.tsbuildinfo
+.serena/
