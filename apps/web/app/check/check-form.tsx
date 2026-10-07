@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,29 +47,36 @@ export function CheckForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <label htmlFor="token-input" className="text-sm text-zinc-300">
-        Post text or token address
-      </label>
-      <Textarea
-        id="token-input"
-        name="input"
-        value={input}
-        onChange={(event) => setInput(event.target.value)}
-        placeholder="CA: paste a Solana mint, or a post that says $TICKER"
-        disabled={pending}
-      />
-      <label htmlFor="pro-wallet" className="text-sm text-zinc-300">
-        Paying wallet, optional
-      </label>
-      <Input
-        id="pro-wallet"
-        value={wallet}
-        onChange={(event) => setWallet(event.target.value)}
-        placeholder="Pro wallet skips the hourly limit"
-        disabled={pending}
-        autoComplete="off"
-      />
+    <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-line bg-panel p-5">
+      <div>
+        <label htmlFor="token-input" className="text-sm text-muted">
+          Post text or token address
+        </label>
+        <Textarea
+          id="token-input"
+          name="input"
+          className="mt-2"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Paste a Solana mint, or a post that names $TICKER"
+          disabled={pending}
+        />
+      </div>
+      <div>
+        <label htmlFor="pro-wallet" className="text-sm text-muted">
+          Pro wallet, optional
+        </label>
+        <Input
+          id="pro-wallet"
+          className="mt-2"
+          value={wallet}
+          onChange={(event) => setWallet(event.target.value)}
+          placeholder="The wallet that paid for Pro"
+          disabled={pending}
+          autoComplete="off"
+        />
+        <p className="mt-2 text-sm text-faint">This is not a login. It only skips the hourly limit when that wallet is Pro.</p>
+      </div>
       <div className="flex flex-wrap gap-2">
         {examples.map((example) => (
           <Button
@@ -85,11 +93,7 @@ export function CheckForm({
           </Button>
         ))}
       </div>
-      {error ? (
-        <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <Notice tone="bad">{error}</Notice> : null}
       <Button type="submit" disabled={pending}>
         {pending ? "Checking…" : "Run the check"}
       </Button>

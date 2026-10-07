@@ -88,7 +88,7 @@ Lens does not take card numbers. Pro is a USDC transfer on Solana mainnet.
 1. Use a wallet you control as the treasury.
 2. Set `PRO_TREASURY_WALLET` to that wallet's address.
 3. Leave `USDC_MINT` empty. Lens uses mainnet USDC (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`).
-4. `PRO_PRICE_USDC` defaults to 10 and `PRO_PERIOD_DAYS` defaults to 30.
+4. `PRO_PRICE_USDC` defaults to 10 and `PRO_PERIOD_DAYS` defaults to 30. The Pro page reads those values. `PRO_CHECKOUT_TTL_HOURS` defaults to 24. An unpaid link older than that is reported as expired. A full USDC transfer still confirms.
 5. `PRO_RPC_URL` defaults to the same mainnet RPC as token reads, because the payment is on mainnet even when memos are on devnet.
 
 ## Birdeye (optional)

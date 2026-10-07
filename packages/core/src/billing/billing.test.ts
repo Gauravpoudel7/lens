@@ -116,6 +116,57 @@ describe("solana pay", () => {
     if (again.ok) expect(again.already).toBe(true);
   });
 
+  it("distinguishes a missing reference, a short transfer, and an expired checkout", async () => {
+    const store = new MemoryStore();
+    const cfg = config();
+    let mode: "none" | "short" | "full" = "none";
+    const chain: PaymentChain = {
+      async findPayments(reference) {
+        if (mode === "none") return [];
+        const amount = mode === "full" ? "10000000" : "1000000";
+        return [
+          {
+            signature: mode === "full" ? "full-sig" : "short-sig",
+            accountKeys: [reference, treasury],
+            pre: [{ owner: treasury, mint: USDC_MINT_MAINNET, amount: "0" }],
+            post: [{ owner: treasury, mint: USDC_MINT_MAINNET, amount }],
+          },
+        ];
+      },
+    };
+    const deps = { config: cfg, store, chain };
+    const missing = await confirmUsdcCheckout(deps, "missing-reference");
+    expect(missing).toMatchObject({ ok: false, reason: "not_found" });
+
+    const started = await startUsdcCheckout(deps, { xHandle: "payer" });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+
+    const pending = await confirmUsdcCheckout(deps, started.session.reference);
+    expect(pending).toMatchObject({ ok: false, reason: "pending" });
+
+    mode = "short";
+    const short = await confirmUsdcCheckout(deps, started.session.reference);
+    expect(short).toMatchObject({ ok: false, reason: "wrong_amount" });
+
+    mode = "none";
+    const expired = await confirmUsdcCheckout(
+      deps,
+      started.session.reference,
+      new Date(Date.now() + 25 * 60 * 60 * 1000),
+    );
+    expect(expired).toMatchObject({ ok: false, reason: "expired" });
+
+    mode = "full";
+    const late = await confirmUsdcCheckout(
+      deps,
+      started.session.reference,
+      new Date(Date.now() + 48 * 60 * 60 * 1000),
+    );
+    expect(late.ok).toBe(true);
+    if (late.ok) expect(late.user.tier).toBe("pro");
+  });
+
   it("keeps card checkout behind the same rail interface", async () => {
     const card = createCardRail();
     expect(card.id).toBe("card");

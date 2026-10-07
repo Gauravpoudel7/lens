@@ -4,6 +4,7 @@ import type { LensConfig } from "../types.js";
 import type { LensStore } from "../store/types.js";
 import {
   createCardRail,
+  deltaFor,
   newReference,
   paymentSatisfied,
   solanaPayUrl,
@@ -11,12 +12,26 @@ import {
   type CheckoutSession,
   type PaymentChain,
   type PaymentRail,
+  type ReferencePayment,
 } from "./solana-pay.js";
+
+export type ConfirmFailureReason =
+  | "not_found"
+  | "not_usdc"
+  | "account_missing"
+  | "expired"
+  | "wrong_amount"
+  | "pending";
 
 export interface BillingDeps {
   config: Pick<
     LensConfig,
-    "proPriceUsdc" | "proPeriodDays" | "proTreasury" | "usdcMint" | "publicBaseUrl"
+    | "proPriceUsdc"
+    | "proPeriodDays"
+    | "proCheckoutTtlHours"
+    | "proTreasury"
+    | "usdcMint"
+    | "publicBaseUrl"
   >;
   store: LensStore;
   chain: PaymentChain;
@@ -75,36 +90,59 @@ export async function startUsdcCheckout(
   return { ok: true, session, user };
 }
 
+function fail(
+  error: string,
+  reason: ConfirmFailureReason,
+): { ok: false; error: string; reason: ConfirmFailureReason } {
+  return { ok: false, error, reason };
+}
+
+function referenceSeen(payment: PaymentRecord, observed: ReferencePayment): boolean {
+  return observed.accountKeys.includes(payment.reference);
+}
+
 export async function confirmUsdcCheckout(
   deps: BillingDeps,
   reference: string,
   now = new Date(),
 ): Promise<
   | { ok: true; user: UserRecord; signature: string; already: boolean }
-  | { ok: false; error: string }
+  | { ok: false; error: string; reason: ConfirmFailureReason }
 > {
   const payment = await deps.store.getPaymentByReference(reference.trim());
-  if (!payment) return { ok: false, error: "No checkout exists for that reference." };
+  if (!payment) return fail("No checkout exists for that reference.", "not_found");
   if (payment.provider !== "solana_usdc") {
-    return { ok: false, error: "That checkout is not a USDC transfer." };
+    return fail("That checkout is not a USDC transfer.", "not_usdc");
   }
   const user = await deps.store.getUser(payment.userId);
-  if (!user) return { ok: false, error: "The account for that checkout is missing." };
+  if (!user) return fail("The account for that checkout is missing.", "account_missing");
   if (payment.status === "paid" && payment.signature) {
     return { ok: true, user, signature: payment.signature, already: true };
   }
   const observed = await deps.chain.findPayments(payment.reference);
   const match = observed.find((row) => paymentSatisfied({ payment, observed: row }));
-  if (!match) {
-    return {
-      ok: false,
-      error: "No confirmed USDC transfer to the treasury includes this reference yet.",
-    };
+  if (match) {
+    await deps.store.updatePayment(payment.id, { status: "paid", signature: match.signature });
+    const until = new Date(now.getTime() + deps.config.proPeriodDays * 24 * 60 * 60 * 1000);
+    const pro = await deps.store.setProUntil(user.id, until.toISOString());
+    return { ok: true, user: pro, signature: match.signature, already: false };
   }
-  await deps.store.updatePayment(payment.id, { status: "paid", signature: match.signature });
-  const until = new Date(now.getTime() + deps.config.proPeriodDays * 24 * 60 * 60 * 1000);
-  const pro = await deps.store.setProUntil(user.id, until.toISOString());
-  return { ok: true, user: pro, signature: match.signature, already: false };
+  const short = observed.find((row) => {
+    if (!referenceSeen(payment, row)) return false;
+    return deltaFor(row, payment.recipient, payment.mint) < BigInt(payment.amountRaw);
+  });
+  if (short) {
+    return fail(
+      "A transfer with this reference reached the treasury, but the USDC amount is less than the price.",
+      "wrong_amount",
+    );
+  }
+  const created = Date.parse(payment.createdAt);
+  const ageMs = Number.isFinite(created) ? now.getTime() - created : 0;
+  if (ageMs > deps.config.proCheckoutTtlHours * 60 * 60 * 1000) {
+    return fail("This checkout has expired. Start a new one and pay that reference.", "expired");
+  }
+  return fail("No confirmed USDC transfer to the treasury includes this reference yet.", "pending");
 }
 
 export function cardRail(): PaymentRail {

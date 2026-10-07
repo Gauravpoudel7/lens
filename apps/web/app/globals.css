@@ -1,39 +1,175 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #07080d;
-  --paper-2: #12151c;
-  --ink: #f4f6fb;
-  --muted: #9aa3b5;
-  --line: rgba(255, 255, 255, 0.1);
-  --high: #fb7185;
-  --med: #fbbf24;
-  --low: #34d399;
-  --stamp: #12151c;
+  --paper: #0e1210;
+  --panel: #171c19;
+  --panel-2: #212823;
+  --line: #313a34;
+  --ink: #f4f6f3;
+  --muted: #c5cfc8;
+  --faint: #9aa69e;
+  --accent: #3ddc97;
+  --accent-text: #8cf0c3;
+  --accent-ink: #062117;
+  --low: #3ddc97;
+  --low-bg: #10261c;
+  --med: #f0c14d;
+  --med-bg: #2a230f;
+  --high: #ff8d98;
+  --high-bg: #2c1418;
+  --warn-bg: #2a230f;
+  --bad-bg: #2c1418;
 }
 
 @theme inline {
   --color-paper: var(--paper);
-  --color-paper-2: var(--paper-2);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-line: var(--line);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-high: var(--high);
-  --color-med: var(--med);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-ink: var(--accent-ink);
   --color-low: var(--low);
-  --color-stamp: var(--stamp);
-  --font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+  --color-low-bg: var(--low-bg);
+  --color-med: var(--med);
+  --color-med-bg: var(--med-bg);
+  --color-high: var(--high);
+  --color-high-bg: var(--high-bg);
+  --font-sans: var(--font-source), "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Newsreader, ui-serif, Georgia, serif;
+  --font-mono: var(--font-plex), "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
 }
 
 body {
-  background:
-    radial-gradient(900px 420px at 80% -10%, rgba(52, 211, 153, 0.16), transparent 55%),
-    radial-gradient(700px 380px at -10% 10%, rgba(56, 189, 248, 0.08), transparent 50%),
-    var(--paper);
+  background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-source), "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(52, 211, 153, 0.35);
+  background: rgba(61, 220, 151, 0.35);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: 0.75rem;
+  z-index: 50;
+  transform: translateY(-150%);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.5rem 0.9rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes verdict-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.verdict-reveal {
+  animation: verdict-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes meter-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.meter-fill {
+  transform-origin: left center;
+  animation: meter-fill 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes draw-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.proof-draw path {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 28;
+  animation: draw-check 0.45s ease 0.12s forwards;
+}
+
+@keyframes wait-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.status-wait {
+  animation: wait-pulse 1.4s ease-in-out infinite;
+}
+
+.ledger-grid {
+  background-image:
+    linear-gradient(to right, rgba(244, 246, 243, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244, 246, 243, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black 20%, transparent 85%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .verdict-reveal,
+  .meter-fill,
+  .proof-draw path,
+  .status-wait {
+    animation: none;
+  }
+
+  .proof-draw path {
+    stroke-dashoffset: 0;
+  }
 }

@@ -183,6 +183,8 @@ export interface LensConfig {
   rpcRetryAttempts: number;
   proPriceUsdc: number;
   proPeriodDays: number;
+  /** Unpaid Solana Pay checkouts older than this are reported as expired. A full transfer still confirms. */
+  proCheckoutTtlHours: number;
   proTreasury?: string;
   proRpcUrl: string;
   usdcMint: string;

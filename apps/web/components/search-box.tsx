@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
 
 export function SearchBox() {
   const router = useRouter();
@@ -40,35 +39,32 @@ export function SearchBox() {
 
   return (
     <form onSubmit={onSubmit} className="mt-8 w-full max-w-2xl">
-      <label htmlFor="hero-search" className="sr-only">
+      <label htmlFor="hero-search" className="text-sm text-muted">
         Mint address or ticker
       </label>
-      <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-[0_20px_80px_rgba(0,0,0,0.35)] sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
-          <Search className="size-5 shrink-0 text-zinc-400" aria-hidden />
-          <input
-            id="hero-search"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="Paste a mint address or $TICKER"
-            disabled={pending}
-            className="h-12 w-full bg-transparent text-base text-white outline-none placeholder:text-zinc-500"
-          />
-        </div>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <input
+          id="hero-search"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Paste a mint or $TICKER"
+          disabled={pending}
+          className="h-12 w-full rounded-xl border border-line bg-paper px-3 text-base text-ink outline-none placeholder:text-faint"
+        />
         <button
           type="submit"
           disabled={pending}
-          className="h-12 rounded-xl bg-emerald-400 px-5 text-sm font-semibold text-black hover:bg-emerald-300 disabled:opacity-50"
+          className="h-12 shrink-0 rounded-full bg-accent px-5 text-sm font-semibold text-accent-ink hover:bg-[#62e4ad] disabled:opacity-50"
         >
-          {pending ? "Checking…" : "Check token"}
+          {pending ? "Checking…" : "Check this coin"}
         </button>
       </div>
       {error ? (
-        <p className="mt-3 rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
+        <p className="mt-3 rounded-xl border border-high/40 bg-high-bg px-3 py-2 text-sm text-high" role="alert">
           {error}
         </p>
       ) : (
-        <p className="mt-3 text-xs text-zinc-500">Free checks are rate-limited per hour. The result is added to the public record.</p>
+        <p className="mt-3 text-sm text-faint">The result is added to the public record. Free checks from this site are limited per hour.</p>
       )}
     </form>
   );

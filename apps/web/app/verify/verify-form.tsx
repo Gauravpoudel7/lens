@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -49,43 +50,54 @@ export function VerifyForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <label htmlFor="proof-text" className="text-sm text-zinc-300">
-        Exact reply text
-      </label>
-      <Textarea id="proof-text" value={text} onChange={(event) => setText(event.target.value)} />
-      <label htmlFor="proof-sig" className="text-sm text-zinc-300">
-        Transaction signature
-      </label>
-      <input
-        id="proof-sig"
-        value={signature}
-        onChange={(event) => setSignature(event.target.value)}
-        className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-emerald-300/40"
-        placeholder="mock_… or a Solana signature"
-      />
+    <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-line bg-panel p-5">
+      <div>
+        <label htmlFor="proof-text" className="text-sm text-muted">
+          Exact reply text
+        </label>
+        <Textarea id="proof-text" className="mt-2" value={text} onChange={(event) => setText(event.target.value)} />
+      </div>
+      <div>
+        <label htmlFor="proof-sig" className="text-sm text-muted">
+          Transaction signature
+        </label>
+        <input
+          id="proof-sig"
+          value={signature}
+          onChange={(event) => setSignature(event.target.value)}
+          className="mt-2 h-11 w-full rounded-xl border border-line bg-paper px-3 font-mono text-sm text-ink outline-none placeholder:text-faint"
+          placeholder="mock_… or a Solana signature"
+        />
+      </div>
       <Button type="submit" disabled={pending}>
         {pending ? "Checking…" : "Verify"}
       </Button>
-      {result?.error ? (
-        <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
-          {result.error}
-        </p>
-      ) : null}
+      {result?.error ? <Notice tone="bad">{result.error}</Notice> : null}
       {result && !result.error ? (
         <div
           className={`rounded-xl border px-3 py-3 text-sm ${
-            result.ok ? "border-emerald-400/30 text-emerald-200" : "border-rose-400/30 text-rose-200"
+            result.ok ? "border-low/40 bg-low-bg text-low" : "border-high/40 bg-high-bg text-high"
           }`}
           role="status"
         >
-          <p className="font-medium">{result.ok ? "Match" : "No match"}</p>
+          <p className="flex items-center gap-2 font-semibold text-ink">
+            {result.ok ? <VerifiedMark /> : null}
+            {result.ok ? "Verified" : "No match"}
+          </p>
           <p className="mt-1">{result.reason}</p>
-          {result.hash ? <p className="mt-2 break-all font-mono text-xs text-zinc-200">{result.hash}</p> : null}
-          {result.signedAt ? <p className="mt-1 text-xs text-zinc-400">Memo time {result.signedAt}</p> : null}
-          {result.cluster ? <p className="text-xs text-zinc-400">Cluster {result.cluster}</p> : null}
+          {result.hash ? <p className="mt-2 break-all font-mono text-xs text-ink">{result.hash}</p> : null}
+          {result.signedAt ? <p className="mt-1 text-xs text-muted">Memo time {result.signedAt}</p> : null}
+          {result.cluster ? <p className="text-xs text-muted">Cluster {result.cluster}</p> : null}
         </div>
       ) : null}
     </form>
+  );
+}
+
+function VerifiedMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="proof-draw size-5" aria-hidden="true">
+      <path d="M5 12.5 10 17.5 19 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

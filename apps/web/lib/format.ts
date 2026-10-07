@@ -26,6 +26,22 @@ export function formatRate(value: number | null): string {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
+export function shortMint(mint: string): string {
+  if (mint.length <= 14) return mint;
+  return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+}
+
+export function formatUsdc(amount: number): string {
+  if (!Number.isFinite(amount)) return "—";
+  const rounded = Math.round(amount * 100) / 100;
+  return rounded.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+export function percentPoints(value: number | null): number | null {
+  if (value == null) return null;
+  return Math.round(value * 1000) / 10;
+}
+
 export function formatUsd(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;

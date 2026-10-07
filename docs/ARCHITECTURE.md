@@ -20,7 +20,7 @@ The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no 
 | Alerts | `packages/core/src/alerts.ts` | DM Pro watchers when a check is HIGH. |
 | Discovery | `packages/core/src/discover.ts` | DexScreener token profiles and boosts. |
 | Outcome job | `packages/core/src/outcomes.ts` | Price change after N days. |
-| Scorecard | `apps/web` | Server-rendered record, report page, check form, verify form. |
+| Scorecard | `apps/web` | Server-rendered record, report page, check form, verify form, Pro checkout, and `/account`. |
 | Blink | `packages/core/src/blink.ts` and `apps/web/app/api/actions/trade/[mint]` | Solana Action. Jupiter swap builder is separate. |
 
 ## Data flow
@@ -141,6 +141,8 @@ The live client resolves the bot user id once, when it is constructed. `X_BOT_US
 Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUntil` is in the future. Pro is set only by `confirmUsdcCheckout` after a matching USDC balance increase on the treasury, with the checkout reference present in the transaction account keys. The counter is not incremented for Pro.
 
 `MAX_X_REPLIES_PER_DAY` (default 50) is a separate counter for the bot, stored as a `UsageDay` row with id `lens:x_replies`. When it is reached, the worker does not prove or reply. Pro does not bypass it. Outbound posts still use `OUTBOUND_DAILY_CAP`.
+
+`confirmUsdcCheckout` reports `not_found` when the reference was never issued, `wrong_amount` when a transfer includes the reference but the USDC received is short, and `expired` when an unpaid checkout is older than `PRO_CHECKOUT_TTL_HOURS` (default 24). A full transfer still confirms after that window. The web app shows those reasons. It does not mark Pro from the form alone.
 
 `npm run doctor` prints a ready / not-ready list and does not post. `npm run doctor -- --x` adds one `GET /2/users/me`. That flag does not refresh OAuth tokens.
 

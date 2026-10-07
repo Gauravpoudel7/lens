@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   if (!reference) return Response.json({ error: "Paste the payment reference." }, { status: 400 });
   const deps = await billingDeps();
   const result = await confirmUsdcCheckout(deps, reference);
-  if (!result.ok) return Response.json({ error: result.error }, { status: 402 });
+  if (!result.ok) return Response.json({ error: result.error, reason: result.reason }, { status: 402 });
   return Response.json({
     signature: result.signature,
     already: result.already,

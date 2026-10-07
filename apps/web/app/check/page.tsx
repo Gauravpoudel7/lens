@@ -1,6 +1,6 @@
 import { FIXTURES } from "@lens/core";
-import { ModeBanner } from "@/components/mode-banner";
-import { getRuntime } from "@/lib/runtime";
+import { PageHeader } from "@/components/page-header";
+import { publicConfig } from "@/lib/public-config";
 import { CheckForm } from "./check-form";
 
 export const dynamic = "force-dynamic";
@@ -10,27 +10,19 @@ export const metadata = {
 };
 
 export default async function CheckPage() {
-  let dataMode = "mock";
-  let proofMode = "mock";
-  try {
-    const rt = await getRuntime();
-    dataMode = rt.config.dataMode;
-    proofMode = rt.config.proofMode;
-  } catch {
-    dataMode = "mock";
-    proofMode = "mock";
-  }
+  const config = await publicConfig();
 
   return (
     <main className="max-w-2xl py-10 sm:py-14">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">Manual check</p>
-      <h1 className="mt-3 text-4xl font-semibold tracking-tight">Same rules the bot uses.</h1>
-      <p className="mt-3 text-sm leading-6 text-zinc-400">
-        Paste a contract address, a $ticker, or the text of a promo. Lens resolves the token, scores it with fixed
-        rules, writes the reply, and stores a proof before the report opens. The result is added to the public
-        record. Free checks are rate-limited per hour.
+      <PageHeader
+        kicker="Check"
+        title="Same rules the bot uses."
+        lede="Paste a mint, a $ticker, or the text of a post. Lens scores it, writes the reply, and stores the proof before the report opens. The result joins the public record."
+      />
+      <p className="mt-4 max-w-2xl text-sm leading-6 text-faint">
+        Free checks from one IP are limited to {config.checkApiLimitPerHour} an hour. A Pro wallet on the form skips
+        that limit. On X, free accounts get {config.rateLimitPerUserPerDay} replies a day.
       </p>
-      <ModeBanner dataMode={dataMode} proofMode={proofMode} />
       <CheckForm
         examples={[
           {

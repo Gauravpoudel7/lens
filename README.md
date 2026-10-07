@@ -105,8 +105,9 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `OUTBOUND_DISCOVER` | `false` | Also read DexScreener profiles and boosts |
 | `OUTBOUND_DAILY_CAP` | `8` | Calls plus warnings posted per UTC day |
 | `PRO_TREASURY_WALLET` | empty | Wallet that receives Pro USDC |
-| `PRO_PRICE_USDC` | `10` | Price for one Pro period |
+| `PRO_PRICE_USDC` | `10` | Price for one Pro period. The Pro page reads this. Unset means 10 USDC |
 | `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |
+| `PRO_CHECKOUT_TTL_HOURS` | `24` | Unpaid Solana Pay checkouts older than this are reported as expired. A full USDC transfer still confirms |
 | `USDC_MINT` | mainnet USDC | Override only for a devnet payment test |
 | `PRO_RPC_URL` | same as `DATA_RPC_URL` | Mainnet RPC used to verify the USDC transfer |
 | `JUPITER_BASE_URL` | `https://api.jup.ag` | Quote, swap, and price. Paths stay `/swap/v1/quote`, `/swap/v1/swap`, and `/price/v3` |
@@ -171,6 +172,8 @@ How to obtain each key is in [docs/KEYS.md](docs/KEYS.md). How to run the Docker
 ## Pro
 
 Free X accounts get `RATE_LIMIT_PER_USER_PER_DAY` replies (default 5). An account is Pro after a USDC transfer to `PRO_TREASURY_WALLET` includes that checkout's Solana Pay reference and at least the configured amount. Pro mentions skip the daily cap. Pro watchlist members get a DM when a checked mint is HIGH. The DM points at the report that was already proved. The risk engine does not look at who paid.
+
+The Pro page reads `PRO_PRICE_USDC` (default 10 when unset), `PRO_PERIOD_DAYS` (default 30), and `RATE_LIMIT_PER_USER_PER_DAY`. An unpaid checkout older than `PRO_CHECKOUT_TTL_HOURS` (default 24) is reported as expired. A transfer that includes the reference but sends less than the price is reported as the wrong amount. A reference Lens never issued is reported as not found. A full transfer still confirms after the window. `/account` looks up the plan by X handle or wallet. There is no password. Lens does not hold the USDC.
 
 The public check form stays on an hourly IP limit. Sending the paying wallet with the form skips that limit. The wallet address is not a login. Anyone who knows a paying wallet can use it on the form. The X cap uses the author of the mention.
 

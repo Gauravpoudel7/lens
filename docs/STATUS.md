@@ -12,9 +12,9 @@ X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=t
 | 2 | Warnings | Must | Done | HIGH outbound posts are kind `warning`. The same proved reply is what gets posted. |
 | 3 | @askLens replies | Must | Read path live, posting not done | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. `GET /2/users/me` succeeded for @perma_10. Mention reads returned HTTP 402 credits depleted. No reply, post, or DM was sent. |
 | 4 | On-chain proof | Must | Done on devnet | Mock is still the default for `npm run demo`. Five live checks below each have a confirmed devnet memo. `POST /api/verify` matched the Bonk reply to its memo. |
-| 5 | Public scorecard | Must | Done | Home, report, win rate, label accuracy, Sharpe after two scored calls. |
+| 5 | Public scorecard | Must | Done | Home shows win rate, label accuracy, Sharpe, and recent checks, with an empty state when nothing is scored. Report leads with the verdict and a text label, the mint, plain-language facts, and the proof. Mock stays labeled. |
 | 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. |
-| 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer | Accounts by X handle and/or wallet, watchlist, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. Card rail exists and refuses checkout. |
+| 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer | Accounts by X handle and/or wallet, watchlist on `/account`, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. A missing reference, a short amount, or an expired unpaid link does not start Pro. Card rail exists and refuses checkout. |
 
 ## Devnet memo
 
@@ -78,9 +78,9 @@ That sample used the public RPC. `getTokenLargestAccounts` returned HTTP 429 aft
 | 4. Proof | Done | Five devnet memos in the section above. `npm run demo` stays mock. |
 | 5. X bot | User read works | `users/me` and token refresh succeeded. The worker now caches that user id. Mentions need X API credits. Nothing was posted. |
 | 6. Database and outcome job | Done | SQLite by default. Postgres when `DATABASE_URL` starts with `postgres`. |
-| 7. Scorecard, report, check form, HTTP API | Done | Port 3847. `/pro` creates a Solana Pay link when `PRO_TREASURY_WALLET` is set. |
+| 7. Scorecard, report, check form, HTTP API | Done | Port 3847. Record, report, check, verify, `/pro`, and `/account`. `/pro` creates a Solana Pay link when `PRO_TREASURY_WALLET` is set. |
 | 8. Blink | Done | Jupiter buy path needs `DATA_MODE=live`. |
-| 9. Pro | Done in tests | Chain verifier is real code. No USDC was sent from this environment. |
+| 9. Pro | Done in tests | Chain verifier is real code. Checkout reports not found, a short amount, and an expired unpaid link (`PRO_CHECKOUT_TTL_HOURS`, default 24). A full transfer still confirms after that window. The site reads price and limits from config. No USDC was sent from this environment. |
 | 10. Scheduled outbound | Done in tests | Worker calls it each poll. Off unless `OUTBOUND_ENABLED=true`. |
 
 ## Mocked vs real
@@ -117,6 +117,7 @@ The scorecard banner stays up while data or proof mode is mock.
 - Live X posts and DMs were not sent. Mention reads and app-only reads return HTTP 402 until the X app has credits. A failed DM is stored as `failed` and is not retried forever.
 - OAuth 2.0 access tokens expire after two hours. One real refresh succeeded and the rotated tokens are stored locally, not in git. `npm run x:oauth2-login` mints a new pair when that refresh token is lost.
 - Lens does not hold user funds. The USDC payment goes to `PRO_TREASURY_WALLET`. The Blink asks the user’s wallet to sign a Jupiter swap.
+- An unpaid Pro checkout older than `PRO_CHECKOUT_TTL_HOURS` (default 24) is reported as expired. A transfer with the right reference and a short USDC amount is reported as the wrong amount and does not start Pro. A full transfer still confirms after the window.
 - Postgres uses the same models as SQLite, generated at process start. It is not a second hand-edited schema.
 
 ## Deploy

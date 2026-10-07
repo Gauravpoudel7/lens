@@ -15,7 +15,7 @@ export function TokenLogo({ mint, symbol, size = 56 }: { mint: string; symbol: s
   if (!sources[index]) {
     return (
       <div
-        className="grid shrink-0 place-items-center rounded-full bg-white/10 font-semibold text-white"
+        className="grid shrink-0 place-items-center rounded-full border border-line bg-panel-2 font-semibold text-ink"
         style={{ width: size, height: size, fontSize: size * 0.38 }}
       >
         {letter}
@@ -31,7 +31,7 @@ export function TokenLogo({ mint, symbol, size = 56 }: { mint: string; symbol: s
       alt=""
       width={size}
       height={size}
-      className="shrink-0 rounded-full bg-white/10 object-cover"
+      className="shrink-0 rounded-full border border-line bg-panel-2 object-cover"
       onError={() => setIndex((current) => current + 1)}
     />
   );

@@ -10,6 +10,9 @@ describe("loadConfig product defaults", () => {
     expect(config.jupiterBaseUrl).toBe("https://api.jup.ag");
     expect(config.jupiterApiKey).toBeUndefined();
     expect(config.maxXRepliesPerDay).toBe(50);
+    expect(config.proPriceUsdc).toBe(10);
+    expect(config.proPeriodDays).toBe(30);
+    expect(config.proCheckoutTtlHours).toBe(24);
     expect(jupiterApiKeyHeader(config.jupiterApiKey)).toEqual({});
   });
 
