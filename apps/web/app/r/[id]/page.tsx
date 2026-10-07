@@ -46,7 +46,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       : null;
   const postUrl = xStatusUrl(check.xPostId);
   const unscored = check.riskLevel === "NONE";
-  const summary = unscored ? noticeBody(check.replyText) : levelSummary(check.riskLevel);
+  const summary = check.riskLevel === "NONE" ? noticeBody(check.replyText) : levelSummary(check.riskLevel);
   const price = check.snapshot?.priceUsd ?? check.priceAtCheck;
   const holders = check.snapshot?.top10HolderPct ?? null;
   const liquidity = check.snapshot?.liquidityUsd ?? null;
