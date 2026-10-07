@@ -24,16 +24,14 @@ export default function OpenGraphImage() {
             style={{
               width: "48px",
               height: "48px",
-              borderRadius: "24px",
-              border: "3px solid #3ddc97",
+              borderRadius: "48px",
+              border: "3px solid #f5f5f4",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#3ddc97",
-              fontSize: "22px",
             }}
           >
-            •
+            <div style={{ width: "14px", height: "14px", borderRadius: "14px", background: "#f5f5f4" }} />
           </div>
           Lens
         </div>

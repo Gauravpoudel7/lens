@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ApertureMark } from "@/components/logo";
 
 const NAV = [
   { href: "/", label: "Record" },
@@ -37,9 +38,8 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-paper">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/mark.svg" alt="" width={28} height={28} className="size-7" />
+        <Link href="/" className="flex items-center gap-2.5 text-ink">
+          <ApertureMark />
           <span className="font-serif text-xl tracking-tight">Lens</span>
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">

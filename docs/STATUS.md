@@ -18,7 +18,7 @@ X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=t
 
 ## Landing page, 2026-10-08
 
-`apps/landing` (`@lens/landing`, port 3848, `npm run dev:landing`) is a static marketing page. It does not call any API, wallet, or X. Links to the record, `/verify`, `/check`, and `/pro` use `NEXT_PUBLIC_APP_URL`. The handle is `NEXT_PUBLIC_X_HANDLE` (default `justasklens`).
+`apps/landing` (`@lens/landing`, port 3848, `npm run dev:landing`) is a static marketing page. It does not call any API, wallet, or X. Links to the record, `/verify`, `/check`, and `/pro` use `NEXT_PUBLIC_APP_URL`. The handle is `NEXT_PUBLIC_X_HANDLE` (default `justasklens`). The scorecard header uses the same aperture mark. The favicon matches the landing icon. `mark.png` is that mark for Blinks.
 
 | Part | Status | Notes |
 | --- | --- | --- |
