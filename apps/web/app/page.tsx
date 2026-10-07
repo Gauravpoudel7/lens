@@ -51,10 +51,8 @@ export default async function HomePage() {
       <main className="py-16">
         <h1 className="font-serif text-4xl tracking-tight">The record is not ready.</h1>
         <p className="mt-3 max-w-xl text-base leading-7 text-muted">
-          Create the database with <code className="text-ink">npm run demo</code> or{" "}
-          <code className="text-ink">npm run db:push</code>, then reload.
+          The public record could not be opened. Try again in a moment.
         </p>
-        <p className="mt-4 text-sm text-high">{error}</p>
       </main>
     );
   }
@@ -125,13 +123,13 @@ export default async function HomePage() {
             }
           />
           <Stat
-            label="Sharpe of calls"
+            label="How steady the calls were"
             value={stats.sharpe}
             decimals={2}
             detail={
               stats.sharpe == null
-                ? "Needs two scored calls. This is not an annualized figure."
-                : "Mean of call returns divided by their sample standard deviation."
+                ? "Needs two scored calls. Average return, divided by how much those returns vary."
+                : "Average call return divided by how much those returns vary. Not a yearly figure."
             }
           />
         </div>

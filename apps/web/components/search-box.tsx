@@ -2,18 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Notice } from "@/components/notice";
+import { tickerNoticeTitle } from "@/lib/notices";
 
 export function SearchBox() {
   const router = useRouter();
   const [input, setInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ kind: "notice" | "error"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     const value = input.trim();
     if (!value) {
-      setError("Paste a mint address or a $ticker.");
+      setError({ kind: "error", text: "Paste a mint address or a $ticker." });
       return;
     }
     setPending(true);
@@ -26,13 +28,14 @@ export function SearchBox() {
       });
       const body = (await response.json()) as { id?: string; error?: string };
       if (!response.ok || !body.id) {
-        setError(body.error ?? "The check did not finish.");
+        const text = body.error ?? "The check did not finish.";
+        setError({ kind: response.status === 422 ? "notice" : "error", text });
         setPending(false);
         return;
       }
       router.push(`/r/${body.id}`);
     } catch {
-      setError("The check request failed. Is the server still running?");
+      setError({ kind: "error", text: "The check request failed. Is the server still running?" });
       setPending(false);
     }
   }
@@ -59,9 +62,15 @@ export function SearchBox() {
           {pending ? "Checking…" : "Check this coin"}
         </button>
       </div>
-      {error ? (
+      {error?.kind === "notice" ? (
+        <div className="mt-3">
+          <Notice tone="info" title={tickerNoticeTitle(error.text)}>
+            <p className="whitespace-pre-line">{error.text}</p>
+          </Notice>
+        </div>
+      ) : error ? (
         <p className="mt-3 rounded-xl border border-high/40 bg-high-bg px-3 py-2 text-sm text-high" role="alert">
-          {error}
+          {error.text}
         </p>
       ) : (
         <p className="mt-3 text-sm text-faint">The result is added to the public record. Free checks from this site are limited per hour.</p>

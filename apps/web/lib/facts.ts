@@ -31,6 +31,6 @@ export function levelName(level: string): string {
   if (level === "HIGH") return "High risk";
   if (level === "MEDIUM") return "Medium risk";
   if (level === "LOW") return "Low risk";
-  if (level === "NONE") return "No token";
+  if (level === "NONE") return "Not scored";
   return level;
 }

@@ -14,11 +14,54 @@ export interface BlinkAction {
       type?: "transaction" | "external-link";
       label: string;
       href: string;
-      parameters?: Array<{ name: string; label?: string; required?: boolean }>;
+      parameters?: Array<{
+        name: string;
+        label?: string;
+        required?: boolean;
+        type?: "number" | "text";
+        min?: number;
+        max?: number;
+      }>;
     }>;
   };
   error?: { message: string };
 }
+
+/** CORS for Action endpoints and for `/actions.json`. */
+export const ACTION_CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, Content-Encoding, Accept-Encoding, X-Accept-Action-Version, X-Accept-Blockchain-Ids",
+  "Access-Control-Expose-Headers": "Content-Type, Content-Encoding, X-Action-Version, X-Blockchain-Ids",
+};
+
+/** Headers on `GET` and `POST /api/actions/trade/:mint`. */
+export const ACTION_RESPONSE_HEADERS: Record<string, string> = {
+  ...ACTION_CORS_HEADERS,
+  "Content-Type": "application/json",
+  "X-Action-Version": "2.4",
+  "X-Blockchain-Ids": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+};
+
+/** Served at `/actions.json` with the same CORS origin header. */
+export const ACTIONS_JSON_HEADERS: Record<string, string> = {
+  ...ACTION_CORS_HEADERS,
+  "Content-Type": "application/json",
+};
+
+/**
+ * Idempotent rule so a shared `/api/actions/...` URL is itself an Action.
+ * Spec: pathPattern maps the website path to the Action API path.
+ */
+export const ACTIONS_JSON = {
+  rules: [
+    {
+      pathPattern: "/api/actions/**",
+      apiPath: "/api/actions/**",
+    },
+  ],
+} as const;
 
 export function buildBlinkAction(check: CheckRecord, config: Pick<LensConfig, "publicBaseUrl">): BlinkAction {
   const icon = `${config.publicBaseUrl}/mark.png`;
@@ -75,7 +118,9 @@ export function buildBlinkAction(check: CheckRecord, config: Pick<LensConfig, "p
           type: "transaction",
           label: "Buy",
           href: `${base}?amount={amount}`,
-          parameters: [{ name: "amount", label: "SOL amount", required: true }],
+          parameters: [
+            { name: "amount", label: "SOL amount", type: "number", required: true, min: 0.000001, max: 50 },
+          ],
         },
         { type: "external-link", label: "Read the report", href: reportUrl },
       ],

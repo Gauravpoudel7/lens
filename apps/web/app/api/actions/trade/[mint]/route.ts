@@ -1,17 +1,9 @@
-import { buildBlinkAction, createRiskCheck, createSwapBuilder } from "@lens/core";
+import { ACTION_RESPONSE_HEADERS, buildBlinkAction, createRiskCheck, createSwapBuilder } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
 
-const HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, Content-Encoding, Accept-Encoding, X-Accept-Action-Version, X-Accept-Blockchain-Ids",
-  "Content-Type": "application/json",
-  "X-Action-Version": "2.4",
-  "X-Blockchain-Ids": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-};
+const HEADERS = ACTION_RESPONSE_HEADERS;
 
 export function OPTIONS() {
   return new Response(null, { status: 204, headers: HEADERS });

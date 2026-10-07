@@ -131,20 +131,74 @@ function liquidityOf(pair: Record<string, unknown>): number {
   return typeof liquidity?.usd === "number" ? liquidity.usd : 0;
 }
 
-export function parseDexSearch(symbol: string, body: unknown): { mint: string; symbol: string; name: string } | null {
-  const pairs = Array.isArray((body as { pairs?: unknown }).pairs)
-    ? ((body as { pairs: unknown[] }).pairs as Array<Record<string, unknown>>)
-    : [];
-  const wanted = symbol.toUpperCase();
-  const hits = pairs.filter((pair) => {
-    if (pair.chainId !== "solana") return false;
-    const base = pair.baseToken as { symbol?: string; address?: string } | undefined;
-    return base?.symbol?.toUpperCase() === wanted && typeof base.address === "string";
-  });
-  if (hits.length === 0) return null;
-  hits.sort((a, b) => liquidityOf(b) - liquidityOf(a));
-  const base = hits[0]!.baseToken as { address: string; symbol: string; name?: string };
-  return { mint: base.address, symbol: base.symbol, name: base.name || base.symbol };
+const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** `$WIF` and `wif` are the same ticker. Jupiter stores dogwifhat as `$WIF`. */
+export function normalizeTicker(symbol: string): string {
+  return symbol.trim().replace(/^\$+/, "").toUpperCase();
+}
+
+export interface VerifiedTokenRow {
+  mint: string;
+  symbol: string;
+  name: string;
+}
+
+/**
+ * Rows from Jupiter `GET /tokens/v2/tag?query=verified`, or from a search payload.
+ * A row counts only when `isVerified` is true or its tags include `verified`.
+ * `moonshot-verified` alone is not enough. Reported liquidity is ignored.
+ */
+export function parseJupiterVerifiedTokens(body: unknown): VerifiedTokenRow[] {
+  if (!Array.isArray(body)) return [];
+  const seen = new Set<string>();
+  const out: VerifiedTokenRow[] = [];
+  for (const row of body) {
+    if (!row || typeof row !== "object") continue;
+    const token = row as Record<string, unknown>;
+    if (!rowIsVerified(token)) continue;
+    const mint = mintOf(token);
+    const symbol = normalizeTicker(typeof token.symbol === "string" ? token.symbol : "");
+    if (!mint || !symbol || seen.has(mint)) continue;
+    seen.add(mint);
+    const name = typeof token.name === "string" && token.name.trim() ? token.name.trim() : symbol;
+    out.push({ mint, symbol, name });
+  }
+  return out;
+}
+
+export function indexVerifiedTokens(tokens: VerifiedTokenRow[]): Map<string, VerifiedTokenRow[]> {
+  const bySymbol = new Map<string, VerifiedTokenRow[]>();
+  for (const token of tokens) {
+    const list = bySymbol.get(token.symbol);
+    if (list) list.push(token);
+    else bySymbol.set(token.symbol, [token]);
+  }
+  return bySymbol;
+}
+
+export function matchVerifiedSymbol(
+  symbol: string,
+  tokens: VerifiedTokenRow[],
+): { status: "unique"; token: VerifiedTokenRow } | { status: "ambiguous"; count: number } | { status: "none" } {
+  const wanted = normalizeTicker(symbol);
+  const hits = tokens.filter((token) => token.symbol === wanted);
+  if (hits.length === 1) return { status: "unique", token: hits[0]! };
+  if (hits.length > 1) return { status: "ambiguous", count: hits.length };
+  return { status: "none" };
+}
+
+function rowIsVerified(token: Record<string, unknown>): boolean {
+  if (token.isVerified === false) return false;
+  if (token.isVerified === true) return true;
+  const tags = Array.isArray(token.tags) ? token.tags.filter((tag): tag is string => typeof tag === "string") : null;
+  if (tags) return tags.includes("verified");
+  return false;
+}
+
+function mintOf(token: Record<string, unknown>): string | null {
+  const raw = typeof token.id === "string" ? token.id : typeof token.address === "string" ? token.address : "";
+  return MINT_RE.test(raw) ? raw : null;
 }
 
 export interface LpLockInput {

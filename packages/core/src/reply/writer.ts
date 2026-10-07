@@ -1,6 +1,14 @@
 import { log } from "../ids.js";
 import type { LensConfig } from "../types.js";
-import { buildTemplateReply, enforceReplyPolicy, SCORECARD_LINE, type ReplyDraftInput } from "./policy.js";
+import {
+  buildTemplateReply,
+  closerLine,
+  enforceReplyPolicy,
+  factsForReply,
+  publicSiteLabel,
+  shortMint,
+  type ReplyDraftInput,
+} from "./policy.js";
 
 export interface ReplyWriter {
   write(input: ReplyDraftInput): Promise<{ text: string; mode: "llm" | "template" }>;
@@ -16,27 +24,36 @@ const SYSTEM_SHARED = [
   "Stay under 270 characters.",
 ];
 
-const SYSTEM_WITH_LINKS = [
-  ...SYSTEM_SHARED,
-  "At most three short lines plus the report link.",
-  "End with this exact sentence: Not financial advice.",
-].join(" ");
+type WriterConfig = Pick<
+  LensConfig,
+  "llmMode" | "llmApiKey" | "llmBaseUrl" | "llmModel" | "publicBaseUrl" | "publicSiteName" | "xReplyLinks"
+>;
 
-const SYSTEM_NO_LINKS = [
-  ...SYSTEM_SHARED,
-  "Do not include any URL, t.co link, or domain name.",
-  `After the facts, end with this exact line: ${SCORECARD_LINE}`,
-  "Then end with this exact sentence: Not financial advice.",
-].join(" ");
-
-type WriterConfig = Pick<LensConfig, "llmMode" | "llmApiKey" | "llmBaseUrl" | "llmModel"> & {
-  xReplyLinks?: boolean;
-};
+function systemPrompt(input: ReplyDraftInput): string {
+  const lines = [...SYSTEM_SHARED];
+  if (input.swapUrl) {
+    lines.push("Do not include any URL. A swap link is added after you write.");
+  } else if (input.includeLinks) {
+    lines.push("At most three short lines plus the report link.");
+  } else {
+    lines.push("Do not include any URL, t.co link, or domain name.");
+    const closer = closerLine(input);
+    if (closer) lines.push(`After the facts, end with this exact line: ${closer}`);
+    else lines.push("Do not mention a scorecard or a website.");
+  }
+  if (input.mint) lines.push(`Name the token with this short mint, exactly: ${shortMint(input.mint)}.`);
+  lines.push("End with this exact sentence: Not financial advice.");
+  return lines.join(" ");
+}
 
 export function createReplyWriter(config: WriterConfig): ReplyWriter {
   return {
     async write(input) {
-      const draft: ReplyDraftInput = { ...input, includeLinks: config.xReplyLinks === true };
+      const draft: ReplyDraftInput = {
+        ...input,
+        includeLinks: config.xReplyLinks === true,
+        siteLabel: input.siteLabel ?? publicSiteLabel(config),
+      };
       const template = buildTemplateReply(draft);
       const enforcedTemplate = enforceReplyPolicy(template, draft);
       const fallback = enforcedTemplate.ok ? enforcedTemplate.text : template;
@@ -60,11 +77,14 @@ export function createReplyWriter(config: WriterConfig): ReplyWriter {
 }
 
 async function draftWithLlm(config: WriterConfig, input: ReplyDraftInput): Promise<string> {
-  const facts = input.facts.map((fact) => `- ${fact.text}`).join("\n");
+  const facts = factsForReply(input.facts)
+    .map((fact) => `- ${fact.text}`)
+    .join("\n");
   const linked = input.includeLinks === true;
   const user = [
     `Risk level: ${input.riskLevel}`,
     `Token: ${input.symbol} (${input.name})`,
+    input.mint ? `Short mint: ${shortMint(input.mint)}` : null,
     linked ? `Report URL: ${input.reportUrl}` : null,
     "Facts:",
     facts || "- No facts.",
@@ -81,7 +101,7 @@ async function draftWithLlm(config: WriterConfig, input: ReplyDraftInput): Promi
       model: config.llmModel,
       temperature: 0.2,
       messages: [
-        { role: "system", content: linked ? SYSTEM_WITH_LINKS : SYSTEM_NO_LINKS },
+        { role: "system", content: systemPrompt(input) },
         { role: "user", content: user },
       ],
     }),

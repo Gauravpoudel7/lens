@@ -10,6 +10,7 @@ import { buildProofPayload, explorerTxUrl } from "./proof/hash.js";
 import type { ProofPublisher } from "./proof/solana.js";
 import type { TokenDataProvider } from "./providers/types.js";
 import { resolveToken } from "./resolver.js";
+import { decideSwapLink, replyHasSwapLink, wantsTradeLink } from "./swap.js";
 import type { LensStore } from "./store/types.js";
 import type {
   CheckKind,
@@ -115,13 +116,13 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
     }
 
     const sourceText = [parentText, incoming.text].filter(Boolean).join("\n");
-    const claims = claimsFromPosts(parentText, incoming.text);
     const parentPostId = incoming.parentId ?? incoming.id;
+    const askedToTrade = wantsTradeLink(incoming.text);
 
-    const reusableMint = await resolveToken(sourceText, deps.provider);
-    if (reusableMint) {
-      const cached = await deps.store.findReusableCheck(parentPostId, reusableMint.mint);
-      if (cached) {
+    const reusable = await resolveToken(sourceText, deps.provider);
+    if (reusable?.status === "token") {
+      const cached = await deps.store.findReusableCheck(parentPostId, reusable.mint);
+      if (cached && cachedReplyMatchesSwap(deps, incoming.text, cached)) {
         return finishReply(deps, incoming, cached, true);
       }
     }
@@ -133,14 +134,24 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
       parentPostId,
       mentionId: incoming.id,
       askedBy: incoming.authorUsername,
+      offerSwap: askedToTrade,
     });
 
-    if (!created.ok && created.error === "no_token") {
+    if (!created.ok && (created.error === "no_token" || created.error === "notice")) {
+      if (askedToTrade) {
+        log("swap link omitted", {
+          reason: "token was not scored",
+          symbol: created.error === "notice" ? created.symbol : undefined,
+        });
+      }
       const notice = await createUnresolvedCheck(deps, {
         mentionId: incoming.id,
         parentPostId,
         askedBy: incoming.authorUsername,
         sourceText,
+        text: created.error === "notice" ? created.detail : undefined,
+        symbol: created.error === "notice" ? created.symbol : undefined,
+        name: created.error === "notice" ? created.name : undefined,
       });
       if (!notice.ok) {
         await deps.store.updateMention(incoming.id, {
@@ -171,6 +182,25 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
 
 function claimSource(parentText: string | null, mentionText: string): string {
   return parentText?.trim() ? parentText : mentionText;
+}
+
+/** A cached reply is reusable only when it already has the swap link this mention should get. */
+function cachedReplyMatchesSwap(deps: LensDeps, mentionText: string, cached: CheckRecord): boolean {
+  const decision = decideSwapLink({
+    asked: wantsTradeLink(mentionText),
+    enabled: deps.config.xSwapLinksOnRequest,
+    publicBaseUrl: deps.config.publicBaseUrl,
+    riskLevel: cached.riskLevel,
+    mint: cached.tokenMint,
+  });
+  const hasLink = replyHasSwapLink(cached.replyText, cached.tokenMint);
+  if ((decision?.include === true) === hasLink) {
+    if (decision && !decision.include) {
+      log("swap link omitted", { reason: decision.reason, symbol: cached.tokenSymbol });
+    }
+    return true;
+  }
+  return false;
 }
 
 async function finishReply(
@@ -227,18 +257,24 @@ export async function createRiskCheck(
     mentionId?: string | null;
     askedBy?: string | null;
     now?: Date;
+    /** Mention text asked to buy, swap, or trade. Ignored unless kind is reply. */
+    offerSwap?: boolean;
   },
 ): Promise<
   | { ok: true; check: CheckRecord }
   | { ok: false; error: "no_token" | "token_not_found" | "proof_failed"; detail?: string }
+  | { ok: false; error: "notice"; detail: string; symbol: string; name: string }
 > {
   const now = input.now ?? new Date();
   const resolved = input.mint
-    ? { mint: input.mint, symbol: null as string | null, name: null as string | null }
+    ? { status: "token" as const, mint: input.mint, symbol: null as string | null, name: null as string | null }
     : input.text
       ? await resolveToken(input.text, deps.provider)
       : null;
   if (!resolved) return { ok: false, error: "no_token" };
+  if (resolved.status === "notice") {
+    return { ok: false, error: "notice", detail: resolved.text, symbol: resolved.symbol, name: resolved.name };
+  }
 
   const snapshot = await deps.provider.getToken(resolved.mint);
   if (!snapshot) return { ok: false, error: "token_not_found" };
@@ -256,13 +292,34 @@ export async function createRiskCheck(
 
   const id = newId();
   const reportUrl = `${deps.config.publicBaseUrl}/r/${id}`;
+  const decision =
+    input.kind === "reply"
+      ? decideSwapLink({
+          asked: input.offerSwap === true,
+          enabled: deps.config.xSwapLinksOnRequest,
+          publicBaseUrl: deps.config.publicBaseUrl,
+          riskLevel: report.level,
+          mint: snapshot.mint,
+        })
+      : null;
   const written = await deps.writer.write({
     riskLevel: report.level,
     symbol: snapshot.symbol,
     name: snapshot.name,
+    mint: snapshot.mint,
     facts: report.facts,
     reportUrl,
+    swapUrl: decision?.include ? decision.url : undefined,
   });
+  if (decision?.include) {
+    if (written.text.includes(decision.url)) {
+      log("swap link included", { symbol: snapshot.symbol, mint: snapshot.mint });
+    } else {
+      log("swap link omitted", { reason: "reply would exceed 500 characters", symbol: snapshot.symbol });
+    }
+  } else if (decision) {
+    log("swap link omitted", { reason: decision.reason, symbol: snapshot.symbol });
+  }
   const signedAt = now;
   const proof = buildProofPayload(written.text, signedAt);
   let published: { signature: string; cluster: string };
@@ -320,9 +377,17 @@ export async function publishOutbound(deps: LensDeps, mint: string, now?: Date):
 
 async function createUnresolvedCheck(
   deps: LensDeps,
-  input: { mentionId: string; parentPostId: string; askedBy: string; sourceText: string },
+  input: {
+    mentionId: string;
+    parentPostId: string;
+    askedBy: string;
+    sourceText: string;
+    text?: string;
+    symbol?: string;
+    name?: string;
+  },
 ): Promise<{ ok: true; check: CheckRecord } | { ok: false; error: "proof_failed"; detail?: string }> {
-  const text = assertSafeNotice(UNRESOLVED_REPLY);
+  const text = assertSafeNotice(input.text ?? UNRESOLVED_REPLY);
   const now = new Date();
   const proof = buildProofPayload(text, now);
   let published: { signature: string; cluster: string };
@@ -338,8 +403,8 @@ async function createUnresolvedCheck(
     mentionId: input.mentionId,
     parentPostId: input.parentPostId,
     tokenMint: "",
-    tokenSymbol: "—",
-    tokenName: "No token found",
+    tokenSymbol: input.symbol ?? "—",
+    tokenName: input.name ?? "No token found",
     riskLevel: "NONE",
     score: 0,
     dangerCount: 0,

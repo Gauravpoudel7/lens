@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { emptyLinks } from "../risk/engine.js";
 import type { TokenSnapshot } from "../types.js";
-import type { ResolvedSymbol, TokenDataProvider } from "./types.js";
+import type { SymbolMatch, TokenDataProvider } from "./types.js";
 
 export interface FixtureSpec {
   mint: string;
@@ -127,10 +127,10 @@ export class MockTokenDataProvider implements TokenDataProvider {
     this.prices.set(mint, priceUsd);
   }
 
-  async resolveBySymbol(symbol: string): Promise<{ mint: string; symbol: string; name: string } | null> {
+  async resolveBySymbol(symbol: string): Promise<SymbolMatch> {
     const spec = BY_SYMBOL.get(symbol.toUpperCase());
-    if (!spec) return null;
-    return { mint: spec.mint, symbol: spec.symbol, name: spec.name };
+    if (!spec) return { status: "none" };
+    return { status: "unique", token: { mint: spec.mint, symbol: spec.symbol, name: spec.name } };
   }
 
   async getToken(mint: string): Promise<TokenSnapshot | null> {

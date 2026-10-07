@@ -185,13 +185,13 @@ export function ProPanel({
             handle and wallet are how Lens finds the plan later.
           </p>
           {!treasurySet ? (
-            <Notice tone="bad" title="Treasury not set">
-              PRO_TREASURY_WALLET is empty, so a payment link cannot be created.
+            <Notice tone="bad" title="Payments are not open">
+              A payment link cannot be created until the treasury wallet is configured.
             </Notice>
           ) : null}
           {priceUsd <= 0 ? (
             <Notice tone="bad" title="Price not set">
-              PRO_PRICE_USDC must be greater than zero.
+              The Pro price has to be greater than zero before a payment link can be created.
             </Notice>
           ) : null}
           <Button type="submit" disabled={pending !== null || !treasurySet || priceUsd <= 0}>

@@ -72,7 +72,12 @@ export function buildDoctorReport(config: LensConfig, probes: DoctorProbes): Doc
   rows.push(
     config.xReplyLinks
       ? { status: "not-ready", label: "X_REPLY_LINKS=true, so posts include URLs" }
-      : { status: "ready", label: "X_REPLY_LINKS=false, replies are link-free" },
+      : {
+          status: "ready",
+          label: config.xSwapLinksOnRequest
+            ? "X_REPLY_LINKS=false. A swap link is added only when a mention asks to buy, swap, or trade"
+            : "X_REPLY_LINKS=false, replies are link-free",
+        },
   );
 
   rows.push(

@@ -6,6 +6,7 @@ import { TokenLogo } from "@/components/token-logo";
 import { Button } from "@/components/ui/button";
 import { FACT_MEANING, levelName, signalLabel } from "@/lib/facts";
 import { formatChange, formatTime, formatUsd, kindLabel } from "@/lib/format";
+import { noticeBody, tickerNoticeTitle } from "@/lib/notices";
 import { getRuntime } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     title: `$${check.tokenSymbol} ${check.riskLevel}`,
     description:
       check.riskLevel === "NONE"
-        ? `${check.tokenName || check.tokenSymbol}: no token was found.`
+        ? noticeBody(check.replyText)
         : `$${check.tokenSymbol}: ${levelName(check.riskLevel)}. ${levelSummary(check.riskLevel)}`,
   };
 }
@@ -44,7 +45,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       ? await verifyPostedText(rt.proofs, check.replyText, check.proof.txSignature)
       : null;
   const postUrl = xStatusUrl(check.xPostId);
-  const summary = check.riskLevel === "NONE" ? "No token was found in that post." : levelSummary(check.riskLevel);
+  const unscored = check.riskLevel === "NONE";
+  const summary = unscored ? noticeBody(check.replyText) : levelSummary(check.riskLevel);
   const price = check.snapshot?.priceUsd ?? check.priceAtCheck;
   const holders = check.snapshot?.top10HolderPct ?? null;
   const liquidity = check.snapshot?.liquidityUsd ?? null;
@@ -74,31 +76,35 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       </p>
 
       <section className={`verdict-reveal mt-5 rounded-2xl border-l-4 ${tone} px-5 py-5 sm:px-6`}>
-        <p className="text-sm font-medium text-ink">{levelName(check.riskLevel)}</p>
-        <p
-          className={`mt-1 font-serif text-6xl tracking-tight sm:text-7xl ${
-            check.riskLevel === "HIGH"
-              ? "text-high"
-              : check.riskLevel === "MEDIUM"
-                ? "text-med"
-                : check.riskLevel === "LOW"
-                  ? "text-low"
-                  : "text-ink"
-          }`}
-        >
-          {check.riskLevel === "NONE" ? "NONE" : check.riskLevel}
-        </p>
-        <p className="mt-3 max-w-2xl text-lg leading-7 text-ink">{summary}</p>
-        {check.outcome ? (
-          <p className="mt-3 text-sm text-muted">
-            After {check.outcome.windowDays} day{check.outcome.windowDays === 1 ? "" : "s"}:{" "}
-            {formatChange(check.outcome.priceChangePct)} ({check.outcome.callResult}).
-          </p>
-        ) : check.riskLevel !== "NONE" ? (
-          <p className="mt-3 text-sm text-faint">
-            The price outcome is scored after {rt.config.outcomeWindowDays} days.
-          </p>
-        ) : null}
+        {unscored ? (
+          <>
+            <p className="text-sm font-medium text-ink">{tickerNoticeTitle(check.replyText)}</p>
+            <p className="mt-3 max-w-2xl whitespace-pre-line text-lg leading-7 text-ink">{summary}</p>
+            <p className="mt-3 text-sm text-faint">Lens did not assign a risk level.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-ink">{levelName(check.riskLevel)}</p>
+            <p
+              className={`mt-1 font-serif text-6xl tracking-tight sm:text-7xl ${
+                check.riskLevel === "HIGH" ? "text-high" : check.riskLevel === "MEDIUM" ? "text-med" : "text-low"
+              }`}
+            >
+              {check.riskLevel}
+            </p>
+            <p className="mt-3 max-w-2xl text-lg leading-7 text-ink">{summary}</p>
+            {check.outcome ? (
+              <p className="mt-3 text-sm text-muted">
+                After {check.outcome.windowDays} day{check.outcome.windowDays === 1 ? "" : "s"}:{" "}
+                {formatChange(check.outcome.priceChangePct)} ({check.outcome.callResult}).
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-faint">
+                The price outcome is scored after {rt.config.outcomeWindowDays} days.
+              </p>
+            )}
+          </>
+        )}
       </section>
 
       <div className="mt-6 flex items-center gap-4">
@@ -109,8 +115,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           </h1>
           <p className="mt-1 text-sm text-muted">
             ${check.tokenSymbol}
-            <span className="mx-2 text-faint">·</span>
-            <span className="tabular-nums">{formatUsd(price)}</span>
+            {price != null ? (
+              <>
+                <span className="mx-2 text-faint">·</span>
+                <span className="tabular-nums">{formatUsd(price)}</span>
+              </>
+            ) : null}
           </p>
         </div>
       </div>
@@ -121,7 +131,13 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         </div>
       ) : null}
 
-      {check.dataMode === "mock" ? (
+      {unscored ? (
+        check.dataMode === "mock" ? (
+          <p className="mt-4 rounded-xl border border-med/40 bg-med-bg px-3 py-2 text-sm text-med">
+            Mock mode. This notice is not a mainnet read.
+          </p>
+        ) : null
+      ) : check.dataMode === "mock" ? (
         <p className="mt-4 rounded-xl border border-med/40 bg-med-bg px-3 py-2 text-sm text-med">
           These facts came from mock fixtures, not a mainnet read.
         </p>
@@ -129,6 +145,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         <p className="mt-4 text-sm text-faint">Sources: {check.sources.join(", ") || "none recorded"}.</p>
       )}
 
+      {unscored ? null : (
       <section className="mt-8 grid gap-3 md:grid-cols-2">
         <Meter
           label="Top 10 holder concentration"
@@ -145,14 +162,21 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           caption="The bar fills at $50k of pooled liquidity. Deeper pools stay full."
         />
       </section>
+      )}
 
       <section className="mt-10">
         <h2 className="font-serif text-3xl tracking-tight">What was checked</h2>
+        {unscored ? (
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            No token facts were recorded. The notice above is the whole result, and the hashed text below is what was stamped.
+          </p>
+        ) : (
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
           Each line is a fact from the rules. The note under it says what that fact means.
         </p>
-        {check.facts.length === 0 ? (
-          <p className="mt-4 text-sm text-faint">No token facts were recorded.</p>
+        )}
+        {unscored || check.facts.length === 0 ? (
+          unscored ? null : <p className="mt-4 text-sm text-faint">No token facts were recorded.</p>
         ) : (
           <ul className="mt-4 divide-y divide-line border-y border-line">
             {check.facts.map((fact) => (

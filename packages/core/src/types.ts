@@ -141,6 +141,8 @@ export interface LensConfig {
   xMode: "mock" | "live";
   llmMode: "auto" | "template";
   publicBaseUrl: string;
+  /** Plain-text site name for link-free replies. Empty means omit the scorecard line. */
+  publicSiteName?: string;
   solanaCluster: "devnet" | "mainnet-beta";
   solanaRpcUrl: string;
   dataRpcUrl: string;
@@ -158,6 +160,11 @@ export interface LensConfig {
   xBotUserId?: string;
   /** X posts include a URL only when this is true. Default false (Pay Per Use). */
   xReplyLinks: boolean;
+  /**
+   * When true, a mention that asks to buy, swap, or trade can include one Blink URL.
+   * Default true. Still requires a public https PUBLIC_BASE_URL, and never on HIGH.
+   */
+  xSwapLinksOnRequest: boolean;
   xOauth2ClientId?: string;
   xOauth2ClientSecret?: string;
   xOauth2AccessToken?: string;

@@ -3,8 +3,9 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   holderStats,
   interpretLpLock,
-  parseDexSearch,
+  matchVerifiedSymbol,
   parseDexTokenResponse,
+  parseJupiterVerifiedTokens,
   parseMintAccount,
   parseRugcheckReport,
 } from "./parse.js";
@@ -63,22 +64,64 @@ describe("live data parsers", () => {
     expect(summary?.createdAt).toBe(new Date(1_700_000_000_000).toISOString());
   });
 
-  it("searches tickers on Solana only", () => {
-    const found = parseDexSearch("bonk", {
-      pairs: [
-        {
-          chainId: "solana",
-          liquidity: { usd: 10 },
-          baseToken: { address: "small", symbol: "BONK", name: "Small" },
-        },
-        {
-          chainId: "solana",
-          liquidity: { usd: 99 },
-          baseToken: { address: "big", symbol: "BONK", name: "Big" },
-        },
-      ],
+  it("keeps one verified ticker and drops a higher-liquidity copycat", () => {
+    const real = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+    const copy = "JUPrJXKV6MyLkbFgZMDXPn7mYR4yqMNn5Pwg27zcyyG";
+    const tokens = parseJupiterVerifiedTokens([
+      {
+        id: copy,
+        symbol: "JUP",
+        name: "JUP",
+        isVerified: false,
+        tags: ["unknown"],
+        liquidity: 40_462_994,
+      },
+      {
+        id: real,
+        symbol: "JUP",
+        name: "Jupiter",
+        isVerified: true,
+        tags: ["verified", "strict"],
+        liquidity: 2_169_290,
+      },
+      {
+        id: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+        symbol: "$WIF",
+        name: "dogwifhat",
+        isVerified: true,
+        tags: ["verified"],
+      },
+      {
+        id: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        symbol: "BABY",
+        name: "Baby One",
+        tags: ["verified"],
+      },
+      {
+        id: "6bzZwnSvBLur1xr9baRyHZ3Ck4GgiUCUZf8YQ3oXBEm5",
+        symbol: "BABY",
+        name: "Baby Two",
+        isVerified: true,
+      },
+      {
+        id: "5bSUrQzzbSqGLzdcDtc4rpoy4AcGpxXLSZbzYb8FGgko",
+        symbol: "MOON",
+        name: "Moonshot only",
+        tags: ["moonshot-verified"],
+      },
+    ]);
+    expect(matchVerifiedSymbol("jup", tokens)).toEqual({
+      status: "unique",
+      token: { mint: real, symbol: "JUP", name: "Jupiter" },
     });
-    expect(found).toEqual({ mint: "big", symbol: "BONK", name: "Big" });
+    expect(tokens.some((token) => token.mint === copy)).toBe(false);
+    expect(matchVerifiedSymbol("WIF", tokens)).toMatchObject({
+      status: "unique",
+      token: { symbol: "WIF", name: "dogwifhat" },
+    });
+    expect(matchVerifiedSymbol("BABY", tokens)).toEqual({ status: "ambiguous", count: 2 });
+    expect(matchVerifiedSymbol("MOON", tokens)).toEqual({ status: "none" });
+    expect(matchVerifiedSymbol("XRP", tokens)).toEqual({ status: "none" });
   });
 
   it("reads lock status from classic LP pools and leaves concentrated liquidity unknown", () => {

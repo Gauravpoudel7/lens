@@ -6,6 +6,7 @@ import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { tickerNoticeTitle } from "@/lib/notices";
 
 export function CheckForm({
   examples,
@@ -15,14 +16,14 @@ export function CheckForm({
   const router = useRouter();
   const [input, setInput] = useState("");
   const [wallet, setWallet] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ kind: "notice" | "error"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     const value = input.trim();
     if (!value) {
-      setError("Paste a token address, a $ticker, or the text of a post.");
+      setError({ kind: "error", text: "Paste a token address, a $ticker, or the text of a post." });
       return;
     }
     setPending(true);
@@ -35,13 +36,14 @@ export function CheckForm({
       });
       const body = (await response.json()) as { id?: string; error?: string };
       if (!response.ok || !body.id) {
-        setError(body.error ?? "The check did not finish.");
+        const text = body.error ?? "The check did not finish.";
+        setError({ kind: response.status === 422 ? "notice" : "error", text });
         setPending(false);
         return;
       }
       router.push(`/r/${body.id}`);
     } catch {
-      setError("The check request failed. Is the server still running?");
+      setError({ kind: "error", text: "The check request failed. Is the server still running?" });
       setPending(false);
     }
   }
@@ -93,7 +95,12 @@ export function CheckForm({
           </Button>
         ))}
       </div>
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error?.kind === "notice" ? (
+        <Notice tone="info" title={tickerNoticeTitle(error.text)}>
+          <p className="whitespace-pre-line">{error.text}</p>
+        </Notice>
+      ) : null}
+      {error?.kind === "error" ? <Notice tone="bad">{error.text}</Notice> : null}
       <Button type="submit" disabled={pending}>
         {pending ? "Checking…" : "Run the check"}
       </Button>

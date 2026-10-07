@@ -23,6 +23,9 @@ export async function POST(request: Request) {
     claimText: input,
   });
   if (!created.ok) {
+    if (created.error === "notice") {
+      return Response.json({ error: created.detail }, { status: 422 });
+    }
     const status = created.error === "proof_failed" ? 502 : 404;
     const error =
       created.error === "no_token"

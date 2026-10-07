@@ -66,7 +66,7 @@ export function kindLabel(kind: CheckRecord["kind"]): string {
     case "blink":
       return "Blink";
     case "unresolved":
-      return "No token";
+      return "Not scored";
   }
 }
 

@@ -8,7 +8,7 @@ import { hashReply } from "./proof/hash.js";
 import { createMockProofPublisher } from "./proof/mock.js";
 import { verifyPostedText } from "./proof/verify.js";
 import { MemoryStore } from "./store/memory.js";
-import { processMention, publishOutbound, type LensDeps } from "./pipeline.js";
+import { X_REPLY_COUNTER_ID, createRiskCheck, processMention, publishOutbound, type LensDeps } from "./pipeline.js";
 import { scoreDueChecks } from "./outcomes.js";
 import { MockXClient } from "./x/mock.js";
 import type { XPost } from "./x/types.js";
@@ -82,7 +82,9 @@ describe("mention pipeline", () => {
     if (result.status !== "replied") return;
     expect(result.riskLevel).toBe("HIGH");
     expect(result.replyText).not.toMatch(/scam/i);
-    expect(result.replyText).toContain("Full report on our scorecard.");
+    expect(result.replyText).toContain("5bSU…Ggko");
+    expect(result.replyText).not.toContain("Full report");
+    expect(result.replyText).not.toContain("could not be verified");
     expect(result.replyText).not.toMatch(/https?:\/\//);
     expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
     expect(result.replyText).toMatch(/claims do not match/i);
@@ -193,6 +195,244 @@ describe("mention pipeline", () => {
     expect(await rt.store.getDailyCount("user_1", utcDay(new Date()))).toBe(0);
   });
 
+  it("replies with a notice for $XRP and does not score a Solana token", async () => {
+    const { rt, x } = deps();
+    const result = await processMention(rt, {
+      id: "mention_xrp",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is $XRP safe?",
+    });
+    expect(result.status).toBe("replied");
+    if (result.status !== "replied") return;
+    expect(result.riskLevel).toBe("NONE");
+    expect(result.replyText).toContain("$XRP isn't a Solana-native token");
+    expect(result.replyText).not.toMatch(/\b(LOW|MEDIUM|HIGH)\b/);
+    expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
+    expect(x.replies[0]?.text).toBe(result.replyText);
+    const check = await rt.store.getCheck(result.checkId);
+    expect(check?.kind).toBe("unresolved");
+    expect(check?.proof?.payload).toContain(hashReply(result.replyText));
+  });
+
+  it("asks for a contract when the ticker is not one verified token", async () => {
+    const { rt } = deps();
+    const result = await processMention(rt, {
+      id: "mention_jup",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is $JUP safe?",
+    });
+    expect(result.status).toBe("replied");
+    if (result.status !== "replied") return;
+    expect(result.replyText).toContain("Several coins use $JUP");
+    expect(result.replyText).not.toMatch(/\b(LOW|MEDIUM|HIGH)\b/);
+    expect(result.riskLevel).toBe("NONE");
+  });
+
+  it("adds one blink link when a mention asks to buy a LOW token on a public https site", async () => {
+    const { rt, x, store } = deps(5, { PUBLIC_BASE_URL: "https://asklens.com", PUBLIC_SITE_NAME: "Lens" });
+    const lines = await captureLogs(async () => {
+      const result = await processMention(rt, {
+        id: "mention_buy",
+        authorId: "user_1",
+        authorUsername: "trader_joe",
+        text: "@justasklens buy $SAFE",
+      });
+      expect(result.status).toBe("replied");
+      if (result.status !== "replied") return;
+      const url = `https://asklens.com/api/actions/trade/${FIXTURES.safe.mint}`;
+      expect(result.riskLevel).toBe("LOW");
+      expect(result.replyText.match(/https?:\/\/\S+/g)).toEqual([url]);
+      expect(result.replyText).toContain(`$SAFE (6bzZ…BEm5)`);
+      expect(result.replyText).toContain("Full report on Lens.");
+      expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
+      expect(result.replyText).not.toMatch(/scam/i);
+      const check = await store.getCheck(result.checkId);
+      expect(check?.proof?.payload).toContain(hashReply(result.replyText));
+      expect(x.replies[0]?.text).toBe(result.replyText);
+      expect(await store.getDailyCount("user_1", utcDay(new Date()))).toBe(1);
+      expect(await store.getDailyCount(X_REPLY_COUNTER_ID, utcDay(new Date()))).toBe(1);
+    });
+    expect(lines.some((line) => line.includes("swap link included"))).toBe(true);
+  });
+
+  it("does not attach a buy link to a HIGH token", async () => {
+    const { rt } = deps(5, { PUBLIC_BASE_URL: "https://asklens.com" });
+    const lines = await captureLogs(async () => {
+      const result = await processMention(rt, {
+        id: "mention_buy_high",
+        authorId: "user_1",
+        authorUsername: "trader_joe",
+        text: `@justasklens buy ${FIXTURES.danger.mint}`,
+      });
+      expect(result.status).toBe("replied");
+      if (result.status !== "replied") return;
+      expect(result.riskLevel).toBe("HIGH");
+      expect(result.replyText).not.toMatch(/https?:\/\//);
+      expect(result.replyText).not.toContain("/api/actions/trade/");
+    });
+    expect(lines.some((line) => line.includes("HIGH risk has no buy link"))).toBe(true);
+  });
+
+  it("does not attach a link when the ticker is not scored", async () => {
+    const { rt } = deps(5, { PUBLIC_BASE_URL: "https://asklens.com" });
+    const lines = await captureLogs(async () => {
+      const foreign = await processMention(rt, {
+        id: "mention_buy_xrp",
+        authorId: "user_1",
+        authorUsername: "trader_joe",
+        text: "@justasklens buy $XRP",
+      });
+      const copycat = await processMention(rt, {
+        id: "mention_swap_jup",
+        authorId: "user_1",
+        authorUsername: "trader_joe",
+        text: "@justasklens swap $JUP",
+      });
+      expect(foreign.status).toBe("replied");
+      expect(copycat.status).toBe("replied");
+      if (foreign.status !== "replied" || copycat.status !== "replied") return;
+      expect(foreign.replyText).toContain("isn't a Solana-native token");
+      expect(copycat.replyText).toContain("Several coins use $JUP");
+      expect(foreign.replyText).not.toMatch(/https?:\/\//);
+      expect(copycat.replyText).not.toMatch(/https?:\/\//);
+    });
+    const omitted = lines.filter((line) => line.includes("token was not scored"));
+    expect(omitted.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("replies without a link when the site URL is not public https", async () => {
+    const { rt } = deps();
+    const lines = await captureLogs(async () => {
+      const result = await processMention(rt, {
+        id: "mention_local_buy",
+        authorId: "user_1",
+        authorUsername: "trader_joe",
+        text: "@justasklens trade $SAFE",
+      });
+      expect(result.status).toBe("replied");
+      if (result.status !== "replied") return;
+      expect(result.riskLevel).toBe("LOW");
+      expect(result.replyText).not.toMatch(/https?:\/\//);
+    });
+    expect(lines.some((line) => line.includes("PUBLIC_BASE_URL is not a public https URL"))).toBe(true);
+  });
+
+  it("omits the swap link when X_SWAP_LINKS_ON_REQUEST is false", async () => {
+    const { rt } = deps(5, {
+      PUBLIC_BASE_URL: "https://asklens.com",
+      X_SWAP_LINKS_ON_REQUEST: "false",
+    });
+    const lines = await captureLogs(async () => {
+      const result = await processMention(rt, {
+        id: "mention_flag_off",
+        authorId: "user_1",
+        authorUsername: "trader_joe",
+        text: "@justasklens buy $SAFE",
+      });
+      expect(result.status).toBe("replied");
+      if (result.status !== "replied") return;
+      expect(result.replyText).not.toMatch(/https?:\/\//);
+    });
+    expect(lines.some((line) => line.includes("X_SWAP_LINKS_ON_REQUEST is false"))).toBe(true);
+  });
+
+  it("does not reuse a link-free reply for a later trade ask, and does not reuse a swap reply for a normal ask", async () => {
+    const { rt, x, store } = deps(5, { PUBLIC_BASE_URL: "https://asklens.com", PUBLIC_SITE_NAME: "Lens" });
+    x.seed({
+      id: "parent_safe",
+      authorId: "promoter",
+      authorUsername: "mooncalls",
+      text: "Look at $SAFE",
+      parentId: null,
+      createdAt: "2026-10-07T12:00:00.000Z",
+    });
+    const first = await processMention(rt, {
+      id: "mention_plain",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is $SAFE okay?",
+      parentId: "parent_safe",
+    });
+    const buy = await processMention(rt, {
+      id: "mention_buy_same",
+      authorId: "user_2",
+      authorUsername: "other",
+      text: "@justasklens buy $SAFE",
+      parentId: "parent_safe",
+    });
+    const again = await processMention(rt, {
+      id: "mention_buy_again",
+      authorId: "user_3",
+      authorUsername: "third",
+      text: "@justasklens swap $SAFE",
+      parentId: "parent_safe",
+    });
+    const plain = await processMention(rt, {
+      id: "mention_plain_again",
+      authorId: "user_4",
+      authorUsername: "fourth",
+      text: "@justasklens thoughts?",
+      parentId: "parent_safe",
+    });
+    expect(first.status).toBe("replied");
+    expect(buy.status).toBe("replied");
+    expect(again.status).toBe("replied");
+    expect(plain.status).toBe("replied");
+    if (first.status !== "replied" || buy.status !== "replied" || again.status !== "replied" || plain.status !== "replied") {
+      return;
+    }
+    const url = `https://asklens.com/api/actions/trade/${FIXTURES.safe.mint}`;
+    expect(first.replyText).not.toMatch(/https?:\/\//);
+    expect(buy.replyText.match(/https?:\/\/\S+/g)).toEqual([url]);
+    expect(buy.cached).toBe(false);
+    expect(buy.checkId).not.toBe(first.checkId);
+    expect(again.cached).toBe(true);
+    expect(again.checkId).toBe(buy.checkId);
+    expect(again.replyText).toBe(buy.replyText);
+    expect(plain.cached).toBe(false);
+    expect(plain.replyText).not.toMatch(/https?:\/\//);
+    expect(plain.checkId).not.toBe(buy.checkId);
+    expect([...store.checks.values()].filter((check) => check.tokenMint === FIXTURES.safe.mint)).toHaveLength(3);
+  });
+
+  it("counts a swap reply toward the existing daily caps", async () => {
+    const { rt, x } = deps(1, { PUBLIC_BASE_URL: "https://asklens.com", MAX_X_REPLIES_PER_DAY: "1" });
+    const first = await processMention(rt, {
+      id: "mention_cap_1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens buy $SAFE",
+    });
+    const second = await processMention(rt, {
+      id: "mention_cap_2",
+      authorId: "user_2",
+      authorUsername: "other",
+      text: "@justasklens trade $MID",
+    });
+    expect(first.status).toBe("replied");
+    expect(second.status).toBe("rate_limited");
+    expect(x.replies).toHaveLength(1);
+    expect(await rt.store.getDailyCount(X_REPLY_COUNTER_ID, utcDay(new Date()))).toBe(1);
+    expect(await rt.store.getDailyCount("user_1", utcDay(new Date()))).toBe(1);
+  });
+
+  it("does not add a swap link on a manual check or an outbound post", async () => {
+    const { rt } = deps(5, { PUBLIC_BASE_URL: "https://asklens.com" });
+    const manual = await createRiskCheck(rt, {
+      kind: "manual",
+      text: `buy ${FIXTURES.safe.mint}`,
+    });
+    expect(manual.ok).toBe(true);
+    if (!manual.ok) return;
+    expect(manual.check.replyText).not.toMatch(/https?:\/\//);
+    const outbound = await publishOutbound(rt, FIXTURES.safe.mint);
+    expect(outbound.ok).toBe(true);
+    if (!outbound.ok) return;
+    expect(outbound.check.replyText).not.toMatch(/https?:\/\//);
+  });
+
   it("scores a proved call after the window", async () => {
     const { rt, provider, store } = deps();
     const posted = await publishOutbound(rt, FIXTURES.safe.mint);
@@ -208,3 +448,17 @@ describe("mention pipeline", () => {
     expect(check?.outcome?.labelCorrect).toBe(true);
   });
 });
+
+async function captureLogs(run: () => Promise<void>): Promise<string[]> {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (line?: unknown) => {
+    lines.push(String(line));
+  };
+  try {
+    await run();
+    return lines;
+  } finally {
+    console.log = original;
+  }
+}

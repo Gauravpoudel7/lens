@@ -1,6 +1,7 @@
 import type { LensConfig } from "./types.js";
 
 export const USDC_MINT_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const USDT_MINT_MAINNET = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 export const USDC_MINT_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
 function num(value: string | undefined, fallback: number): number {
@@ -38,6 +39,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     xMode: env.X_MODE === "live" ? "live" : "mock",
     llmMode: env.LLM_MODE === "template" ? "template" : "auto",
     publicBaseUrl: (env.PUBLIC_BASE_URL ?? "http://127.0.0.1:3847").replace(/\/$/, ""),
+    publicSiteName: clean(env.PUBLIC_SITE_NAME),
     solanaCluster: cluster,
     solanaRpcUrl,
     dataRpcUrl,
@@ -54,6 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     xBearerToken: clean(env.X_BEARER_TOKEN),
     xBotUserId: clean(env.X_BOT_USER_ID),
     xReplyLinks: clean(env.X_REPLY_LINKS)?.toLowerCase() === "true",
+    xSwapLinksOnRequest: clean(env.X_SWAP_LINKS_ON_REQUEST)?.toLowerCase() !== "false",
     xOauth2ClientId: clean(env.X_OAUTH2_CLIENT_ID),
     xOauth2ClientSecret: clean(env.X_OAUTH2_CLIENT_SECRET),
     xOauth2AccessToken: clean(env.X_OAUTH2_ACCESS_TOKEN),

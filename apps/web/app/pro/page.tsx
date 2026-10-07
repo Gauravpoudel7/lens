@@ -94,11 +94,6 @@ export default async function ProPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-sm leading-6 text-faint">
-          These figures read the running configuration. Unset <code className="text-muted">PRO_PRICE_USDC</code> is 10
-          USDC, unset <code className="text-muted">PRO_PERIOD_DAYS</code> is 30 days, and unset{" "}
-          <code className="text-muted">RATE_LIMIT_PER_USER_PER_DAY</code> is 5.
-        </p>
       </section>
 
       <section className="rise mt-12 max-w-2xl" style={{ animationDelay: "140ms" }}>
