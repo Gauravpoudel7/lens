@@ -1,4 +1,5 @@
 import type { TokenDataProvider } from "./providers/types.js";
+import { bareTickerNotice, verifiedMatchNotice } from "./tickers.js";
 
 const BASE58_CHAR = "[1-9A-HJ-NP-Za-km-z]";
 const MINT_RE = new RegExp(
@@ -37,26 +38,51 @@ export function extractTokenCandidates(text: string): TokenCandidates {
   return { mints, symbols };
 }
 
-export interface ResolvedToken {
-  mint: string;
-  symbol: string | null;
-  name: string | null;
-  via: "mint" | "symbol";
-}
+export type TokenResolution =
+  | {
+      status: "token";
+      mint: string;
+      symbol: string | null;
+      name: string | null;
+      via: "mint" | "symbol";
+    }
+  | {
+      status: "notice";
+      symbol: string;
+      name: string;
+      text: string;
+    };
 
 export async function resolveToken(
   text: string,
   provider: TokenDataProvider,
-): Promise<ResolvedToken | null> {
+): Promise<TokenResolution | null> {
   const { mints, symbols } = extractTokenCandidates(text);
   if (mints[0]) {
-    return { mint: mints[0], symbol: symbols[0] ?? null, name: null, via: "mint" };
+    return { status: "token", mint: mints[0], symbol: symbols[0] ?? null, name: null, via: "mint" };
   }
-  for (const symbol of symbols) {
-    const found = await provider.resolveBySymbol(symbol);
-    if (found) {
-      return { mint: found.mint, symbol: found.symbol, name: found.name, via: "symbol" };
-    }
+  const symbol = symbols[0];
+  if (!symbol) return null;
+  const special = bareTickerNotice(symbol);
+  if (special) return { status: "notice", symbol, name: noticeName(symbol), text: special };
+  const match = await provider.resolveBySymbol(symbol);
+  if (match.status === "unique") {
+    return {
+      status: "token",
+      mint: match.token.mint,
+      symbol: match.token.symbol,
+      name: match.token.name,
+      via: "symbol",
+    };
   }
-  return null;
+  const textNotice = verifiedMatchNotice(symbol, match);
+  if (!textNotice) return null;
+  return { status: "notice", symbol, name: "Needs a contract address", text: textNotice };
+}
+
+function noticeName(symbol: string): string {
+  if (symbol === "SOL") return "Native Solana asset";
+  if (symbol === "USDC" || symbol === "USDT") return "Stablecoin";
+  if (symbol === "WBTC" || symbol === "WETH" || symbol === "WBNB") return "Wrapped major";
+  return "Not a Solana token";
 }

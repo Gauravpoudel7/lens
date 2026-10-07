@@ -141,6 +141,8 @@ export interface LensConfig {
   xMode: "mock" | "live";
   llmMode: "auto" | "template";
   publicBaseUrl: string;
+  /** Plain-text site name for link-free replies. Empty means omit the scorecard line. */
+  publicSiteName?: string;
   solanaCluster: "devnet" | "mainnet-beta";
   solanaRpcUrl: string;
   dataRpcUrl: string;

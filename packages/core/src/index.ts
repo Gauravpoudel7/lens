@@ -3,6 +3,7 @@ export * from "./ids.js";
 export * from "./config.js";
 export * from "./claims.js";
 export * from "./resolver.js";
+export * from "./tickers.js";
 export * from "./risk/thresholds.js";
 export * from "./risk/stake-pools.js";
 export * from "./risk/engine.js";

@@ -51,7 +51,14 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       ? await verifyPostedText(rt.proofs, check.replyText, check.proof.txSignature)
       : null;
   const postUrl = xStatusUrl(check.xPostId);
-  const summary = check.riskLevel === "NONE" ? "No token was found in that post." : levelSummary(check.riskLevel);
+  const summary =
+    check.riskLevel === "NONE"
+      ? (check.replyText
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0 && line !== "Not financial advice.") ??
+        "No token was found in that post.")
+      : levelSummary(check.riskLevel);
   const price = check.snapshot?.priceUsd ?? check.priceAtCheck;
   const holders = check.snapshot?.top10HolderPct ?? null;
   const liquidity = check.snapshot?.liquidityUsd ?? null;

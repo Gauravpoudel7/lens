@@ -4,24 +4,32 @@ import { withRetry } from "../net/retry.js";
 import type { LensConfig, TokenSnapshot } from "../types.js";
 import {
   holderStats,
+  indexVerifiedTokens,
   mergeTokenData,
+  normalizeTicker,
   parseBirdeyeSecurity,
-  parseDexSearch,
   parseDexTokenResponse,
+  parseJupiterVerifiedTokens,
   parseMintAccount,
   parseRugcheckReport,
   type ChainSummary,
+  type VerifiedTokenRow,
 } from "./parse.js";
 import { jupiterApiKeyHeader } from "./jupiter.js";
-import type { TokenDataProvider } from "./types.js";
+import type { SymbolMatch, TokenDataProvider } from "./types.js";
 
-async function fetchJson(url: string, init?: RequestInit, attempts = 4): Promise<unknown> {
+/** Refresh the verified symbol index at most this often. */
+const VERIFIED_TTL_MS = 60 * 60 * 1000;
+/** A short or empty payload is a failed read, not "no token is verified". */
+const VERIFIED_MIN_COUNT = 100;
+
+async function fetchJson(url: string, init?: RequestInit, attempts = 4, timeoutMs = 8_000): Promise<unknown> {
   return withRetry(
     safeUrl(url),
     async () => {
       const response = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(timeoutMs),
         headers: { accept: "application/json", ...(init?.headers ?? {}) },
       });
       if (!response.ok) {
@@ -36,6 +44,8 @@ async function fetchJson(url: string, init?: RequestInit, attempts = 4): Promise
 
 export class LiveTokenDataProvider implements TokenDataProvider {
   readonly name = "live";
+  private verified: { loadedAt: number; bySymbol: Map<string, VerifiedTokenRow[]> } | null = null;
+  private verifiedInflight: Promise<Map<string, VerifiedTokenRow[]>> | null = null;
 
   constructor(
     private readonly config: Pick<LensConfig, "dataRpcUrl" | "birdeyeApiKey" | "jupiterBaseUrl"> & {
@@ -44,17 +54,24 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     },
   ) {}
 
-  async resolveBySymbol(symbol: string) {
+  /**
+   * Symbol lookup uses Jupiter's verified token list only.
+   * DexScreener's search sorts by reported liquidity, and that number can be faked,
+   * so it must not choose which mint a $ticker means.
+   */
+  async resolveBySymbol(symbol: string): Promise<SymbolMatch> {
     try {
-      const body = await fetchJson(
-        `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(symbol)}`,
-        undefined,
-        this.attempts(),
-      );
-      return parseDexSearch(symbol, body);
+      const index = await this.verifiedIndex();
+      const hits = index.get(normalizeTicker(symbol)) ?? [];
+      if (hits.length === 1) {
+        const token = hits[0]!;
+        return { status: "unique", token: { mint: token.mint, symbol: token.symbol, name: token.name } };
+      }
+      if (hits.length > 1) return { status: "ambiguous" };
+      return { status: "none" };
     } catch (err) {
-      log("DexScreener search failed", err instanceof Error ? err.message : err);
-      return null;
+      log("verified symbol lookup failed", err instanceof Error ? err.message : err);
+      return { status: "unavailable" };
     }
   }
 
@@ -209,6 +226,40 @@ export class LiveTokenDataProvider implements TokenDataProvider {
 
   private attempts(): number {
     return this.config.rpcRetryAttempts ?? 4;
+  }
+
+  private verifiedIndex(): Promise<Map<string, VerifiedTokenRow[]>> {
+    const fresh = this.verified && Date.now() - this.verified.loadedAt < VERIFIED_TTL_MS;
+    if (fresh && this.verified) return Promise.resolve(this.verified.bySymbol);
+    if (!this.verifiedInflight) {
+      this.verifiedInflight = this.loadVerifiedIndex().finally(() => {
+        this.verifiedInflight = null;
+      });
+    }
+    return this.verifiedInflight;
+  }
+
+  private async loadVerifiedIndex(): Promise<Map<string, VerifiedTokenRow[]>> {
+    try {
+      const body = await fetchJson(
+        `${this.config.jupiterBaseUrl}/tokens/v2/tag?query=verified`,
+        { headers: jupiterApiKeyHeader(this.config.jupiterApiKey) },
+        2,
+        20_000,
+      );
+      const tokens = parseJupiterVerifiedTokens(body);
+      if (tokens.length < VERIFIED_MIN_COUNT) {
+        throw new Error(`jupiter verified list too small (${tokens.length})`);
+      }
+      const bySymbol = indexVerifiedTokens(tokens);
+      this.verified = { loadedAt: Date.now(), bySymbol };
+      log("jupiter verified list loaded", { count: tokens.length });
+      return bySymbol;
+    } catch (err) {
+      log("jupiter verified list failed", err instanceof Error ? err.message : err);
+      if (this.verified) return this.verified.bySymbol;
+      throw err;
+    }
   }
 
   private async rpc(method: string, params: unknown[]): Promise<unknown> {

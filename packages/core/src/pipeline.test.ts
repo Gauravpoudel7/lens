@@ -82,7 +82,9 @@ describe("mention pipeline", () => {
     if (result.status !== "replied") return;
     expect(result.riskLevel).toBe("HIGH");
     expect(result.replyText).not.toMatch(/scam/i);
-    expect(result.replyText).toContain("Full report on our scorecard.");
+    expect(result.replyText).toContain("5bSU…Ggko");
+    expect(result.replyText).not.toContain("Full report");
+    expect(result.replyText).not.toContain("could not be verified");
     expect(result.replyText).not.toMatch(/https?:\/\//);
     expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
     expect(result.replyText).toMatch(/claims do not match/i);
@@ -191,6 +193,41 @@ describe("mention pipeline", () => {
     expect(second.status).toBe("replied");
     expect(x.replies).toHaveLength(2);
     expect(await rt.store.getDailyCount("user_1", utcDay(new Date()))).toBe(0);
+  });
+
+  it("replies with a notice for $XRP and does not score a Solana token", async () => {
+    const { rt, x } = deps();
+    const result = await processMention(rt, {
+      id: "mention_xrp",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is $XRP safe?",
+    });
+    expect(result.status).toBe("replied");
+    if (result.status !== "replied") return;
+    expect(result.riskLevel).toBe("NONE");
+    expect(result.replyText).toContain("$XRP isn't a Solana-native token");
+    expect(result.replyText).not.toMatch(/\b(LOW|MEDIUM|HIGH)\b/);
+    expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
+    expect(x.replies[0]?.text).toBe(result.replyText);
+    const check = await rt.store.getCheck(result.checkId);
+    expect(check?.kind).toBe("unresolved");
+    expect(check?.proof?.payload).toContain(hashReply(result.replyText));
+  });
+
+  it("asks for a contract when the ticker is not one verified token", async () => {
+    const { rt } = deps();
+    const result = await processMention(rt, {
+      id: "mention_jup",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is $JUP safe?",
+    });
+    expect(result.status).toBe("replied");
+    if (result.status !== "replied") return;
+    expect(result.replyText).toContain("Several coins use $JUP");
+    expect(result.replyText).not.toMatch(/\b(LOW|MEDIUM|HIGH)\b/);
+    expect(result.riskLevel).toBe("NONE");
   });
 
   it("scores a proved call after the window", async () => {

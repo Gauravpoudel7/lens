@@ -74,7 +74,8 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PROOF_MODE` | `mock` | `solana` sends a memo before posting |
 | `X_MODE` | `mock` | `live` polls and posts with the X API |
 | `LLM_MODE` | `auto` | `template` skips the model even if a key is set |
-| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Scorecard and Blink links. Omitted from X posts unless `X_REPLY_LINKS=true` |
+| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Scorecard and Blink links. Omitted from X posts unless `X_REPLY_LINKS=true`. A non-local host is also the plain-text “Full report on …” line when `PUBLIC_SITE_NAME` is empty |
+| `PUBLIC_SITE_NAME` | empty | Plain-text place named in link-free replies, such as `Lens`. Omit it while the site is not public. Localhost does not count |
 | `SOLANA_CLUSTER` | `devnet` | Where proofs are written. Token data is still mainnet |
 | `SOLANA_RPC_URL` | devnet public RPC | Proof RPC |
 | `DATA_RPC_URL` | mainnet public RPC, or Helius if `HELIUS_API_KEY` is set | Mint, supply, holders |
@@ -109,7 +110,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |
 | `USDC_MINT` | mainnet USDC | Override only for a devnet payment test |
 | `PRO_RPC_URL` | same as `DATA_RPC_URL` | Mainnet RPC used to verify the USDC transfer |
-| `JUPITER_BASE_URL` | `https://api.jup.ag` | Quote, swap, and price. Paths stay `/swap/v1/quote`, `/swap/v1/swap`, and `/price/v3` |
+| `JUPITER_BASE_URL` | `https://api.jup.ag` | Quote, swap, price, and the verified token list. Paths stay `/swap/v1/quote`, `/swap/v1/swap`, `/price/v3`, and `/tokens/v2/tag` |
 | `JUPITER_API_KEY` | empty | Optional. Sent as `x-api-key` when set. Keyless calls work on the free tier |
 | `JUPITER_FEE_BPS` | `50` | 0.5%, applied only when a fee account is set |
 | `JUPITER_FEE_ACCOUNT` | empty | Jupiter referral/fee token account |
@@ -138,7 +139,13 @@ Thresholds: age under 24 hours is danger, under 7 days is caution. Liquidity und
 
 Known stake-pool receipt mints (JitoSOL, mSOL, bSOL, jupSOL, INF) are matched by mint address. An enabled mint authority on those mints, or a mint authority that is a stake-pool program, is noted as “stake-pool token” and is not a danger sign. A different mint that only copies the ticker is still scored normally.
 
-Unknown creator sells do not count as danger. The fact says the sells could not be verified.
+Unknown creator sells do not count as danger. The report page still says the sells could not be verified. X replies leave that line out.
+
+### Tickers
+
+A contract address is scored as that mint. A `$ticker` is scored only when Jupiter’s verified token list has exactly one token for the symbol (`GET /tokens/v2/tag?query=verified`, no key). If none match, or several do, Lens asks for the contract address and does not pick a pool by liquidity.
+
+`$BTC`, `$ETH`, `$XRP`, and the other non-Solana majors in `packages/core/src/tickers.ts` get a short notice instead of a risk level. `$SOL` is the native asset and is not scored. `$USDC` and `$USDT` name the canonical Solana mint (Circle and Tether) and are not scored, because those tokens keep freeze authority on and the rules would call that danger. `$WBTC`, `$WETH`, and `$WBNB` are the same kind of notice. Paste the mint to check a specific token, including a wrapped one or a copy.
 
 ## Proof format
 

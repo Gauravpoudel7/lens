@@ -1,17 +1,24 @@
 import { isActivePro } from "./accounts.js";
 import { errorMessage, log, newId } from "./ids.js";
 import type { LensDeps } from "./pipeline.js";
+import { publicSiteLabel, shortMint } from "./reply/policy.js";
 import type { CheckRecord } from "./types.js";
 
 export function warningAlertText(
-  check: Pick<CheckRecord, "tokenSymbol" | "id">,
+  check: Pick<CheckRecord, "tokenSymbol" | "tokenMint" | "id">,
   baseUrl: string,
   includeLinks = false,
+  siteLabel: string | null = null,
 ): string {
+  const who = check.tokenMint
+    ? `$${check.tokenSymbol} (${shortMint(check.tokenMint)})`
+    : `$${check.tokenSymbol}`;
   const closer = includeLinks
     ? `Report ${baseUrl}/r/${check.id}.`
-    : "Full report on our scorecard.";
-  return `Lens warning: $${check.tokenSymbol} is HIGH. ${closer} Not financial advice.`;
+    : siteLabel
+      ? `Full report on ${siteLabel}.`
+      : null;
+  return [`Lens warning: ${who} is HIGH.`, closer, "Not financial advice."].filter(Boolean).join(" ");
 }
 
 export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Promise<number> {
@@ -21,7 +28,12 @@ export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Pr
     let sent = 0;
     for (const user of watchers) {
       if (await deps.store.hasAlert(user.id, check.id)) continue;
-      const text = warningAlertText(check, deps.config.publicBaseUrl, deps.config.xReplyLinks);
+      const text = warningAlertText(
+        check,
+        deps.config.publicBaseUrl,
+        deps.config.xReplyLinks,
+        publicSiteLabel(deps.config),
+      );
       if (!user.xUserId) {
         await deps.store.saveAlert({
           id: newId(),

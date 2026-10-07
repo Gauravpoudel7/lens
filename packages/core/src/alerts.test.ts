@@ -42,10 +42,12 @@ describe("warning DMs", () => {
     expect(rt.x.dms).toHaveLength(1);
     expect(rt.x.dms[0]?.recipientId).toBe("111");
     expect(rt.x.dms[0]?.text).toBe(warningAlertText(posted.check, rt.config.publicBaseUrl));
-    expect(rt.x.dms[0]?.text).toContain("Full report on our scorecard.");
+    expect(rt.x.dms[0]?.text).toContain("5bSU…Ggko");
+    expect(rt.x.dms[0]?.text).not.toContain("Full report");
     expect(rt.x.dms[0]?.text).not.toMatch(/https?:\/\//);
     expect(rt.x.timeline[0]?.text).not.toMatch(/https?:\/\//);
-    expect(rt.x.timeline[0]?.text).toContain("Full report on our scorecard.");
+    expect(rt.x.timeline[0]?.text).toContain("5bSU…Ggko");
+    expect(rt.x.timeline[0]?.text).not.toContain("Full report");
     expect(rt.x.dms[0]?.text).not.toMatch(/scam/i);
     expect(rt.x.dms[0]?.text.endsWith("Not financial advice.")).toBe(true);
   });

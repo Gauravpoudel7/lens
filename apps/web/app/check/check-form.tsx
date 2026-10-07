@@ -86,7 +86,7 @@ export function CheckForm({
         ))}
       </div>
       {error ? (
-        <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
+        <p className="whitespace-pre-line rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200" role="alert">
           {error}
         </p>
       ) : null}

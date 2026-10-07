@@ -8,7 +8,7 @@ The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no 
 
 | Piece | Where | Role |
 | --- | --- | --- |
-| Token resolver | `packages/core/src/resolver.ts` | Pulls a base58 mint (32–44 chars) or a `$ticker` out of post text. A mint wins over a ticker. Program ids are ignored. |
+| Token resolver | `packages/core/src/resolver.ts` | Pulls a base58 mint (32–44 chars) or a `$ticker` out of post text. A mint wins over a ticker. Program ids are ignored. A ticker resolves only to one Jupiter-verified token, or becomes a short notice. |
 | Token data provider | `packages/core/src/providers` | `TokenDataProvider`: `resolveBySymbol`, `getToken`, `getPrice`. `MockTokenDataProvider` and `LiveTokenDataProvider`. |
 | Risk engine | `packages/core/src/risk/engine.ts` | Pure function. No network, no model. |
 | Reply writer | `packages/core/src/reply` | Template, or an OpenAI-compatible chat call. `enforceReplyPolicy` runs on both. |
@@ -49,7 +49,7 @@ Order inside `createRiskCheck`:
 2. Load a `TokenSnapshot`.
 3. Read burned/locked claims from the parent post when there is one, otherwise from the text the user pasted.
 4. `evaluateRisk` chooses the level.
-5. The writer produces the exact reply. By default that text has no URL and ends with “Full report on our scorecard.” Set `X_REPLY_LINKS=true` to include `Report: <url>` again.
+5. The writer produces the exact reply. By default that text has no URL. It names the mint in short form (`JUPy…DvCN`) and leaves out unknown facts. A “Full report on …” line is added only when `PUBLIC_SITE_NAME` or a public `PUBLIC_BASE_URL` is set. Set `X_REPLY_LINKS=true` to include `Report: <url>` again.
 6. SHA-256 that string, build `lens:v1|<time>|<hash>`, publish the memo.
 7. Only after the publish succeeds, save the check. Callers post to X after that.
 
@@ -90,11 +90,15 @@ Prisma (`prisma/schema.prisma`). The default provider is SQLite. A `postgresql:/
 ```ts
 interface TokenDataProvider {
   readonly name: string;
-  resolveBySymbol(symbol: string): Promise<{ mint; symbol; name } | null>;
+  resolveBySymbol(symbol: string): Promise<SymbolMatch>;
   getToken(mint: string): Promise<TokenSnapshot | null>;
   getPrice(mint: string): Promise<number | null>;
 }
 ```
+
+`SymbolMatch` is `unique`, `ambiguous`, `none`, or `unavailable`. Live lookup reads Jupiter `GET /tokens/v2/tag?query=verified` (no key; cached for an hour) and keeps a symbol only when exactly one row is verified. DexScreener search is not used for tickers, because reported liquidity can be faked. Mock fixtures are the verified set in mock mode.
+
+Bare tickers for non-Solana majors, `$SOL`, `$USDC`, `$USDT`, and `WBTC` / `WETH` / `WBNB` are notices in `tickers.ts`. They are not passed to the risk engine. A contract address still is.
 
 `TokenSnapshot` is the only object the rules see: age, liquidity, lock, top-10 share, creator sold percent, creator balance percent, mint authority, freeze authority, sniper percent, burned percent, and source links.
 
@@ -102,7 +106,7 @@ interface TokenDataProvider {
 
 **Live** (`LiveTokenDataProvider`), in parallel:
 
-- DexScreener for symbol, price, liquidity, and the earliest pool time in the response. No key.
+- DexScreener for price, liquidity, and the earliest pool time once the mint is known. No key. Not used to choose a `$ticker`.
 - Solana JSON-RPC (`getAccountInfo`, `getTokenLargestAccounts`, `getMultipleAccounts`) for mint layout, freeze authority, supply, top holders, and incinerator burn balance. `DATA_RPC_URL`, or Helius when `HELIUS_API_KEY` is set, otherwise the public mainnet endpoint.
 - RugCheck’s public report for holder list fallback, insider-network percent (used as the sniper figure), creator balance, and LP lock.
 - Birdeye `token_security` only when `BIRDEYE_API_KEY` is set. That is the path that can fill `creatorSoldPct`.
@@ -118,7 +122,7 @@ Known stake-pool mints in `risk/stake-pools.ts` (JitoSOL, mSOL, bSOL, jupSOL, IN
 
 `createReplyWriter` returns the template when `LLM_MODE=template` or no API key is set. Otherwise it calls `POST {LLM_BASE_URL}/chat/completions` with a system prompt that forbids new facts, buy/sell advice, and accusations. The response is dropped if it contains a different risk level, still says “scam” after replacement, or runs past 500 characters. The template is the fallback.
 
-The template tries to stay within 280 characters: header, the sharpest short facts that fit, then either “Full report on our scorecard.” or the report URL when `X_REPLY_LINKS=true`, then the disclaimer. `enforceReplyPolicy` strips `http`/`https`, `t.co`, and bare domains when links are off, and does not put the report URL back. The same flag covers outbound posts and warning DMs. Blinks still link to the report.
+The template tries to stay within 280 characters: header with the short mint, the sharpest short facts that fit (unknown facts omitted, except the incomplete-data line), then either “Full report on <name>.” when a public site is set, or the report URL when `X_REPLY_LINKS=true`, then the disclaimer. With no public site, that closer is omitted. `enforceReplyPolicy` strips `http`/`https`, `t.co`, and bare domains when links are off, then puts the plain-text closer back if one is configured. It does not put the report URL back. The same flag covers outbound posts and warning DMs. Blinks still link to the report.
 
 ## Proof
 
