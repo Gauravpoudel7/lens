@@ -10,6 +10,7 @@ import { buildProofPayload, explorerTxUrl } from "./proof/hash.js";
 import type { ProofPublisher } from "./proof/solana.js";
 import type { TokenDataProvider } from "./providers/types.js";
 import { resolveToken } from "./resolver.js";
+import { decideSwapLink, replyHasSwapLink, wantsTradeLink } from "./swap.js";
 import type { LensStore } from "./store/types.js";
 import type {
   CheckKind,
@@ -116,11 +117,12 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
 
     const sourceText = [parentText, incoming.text].filter(Boolean).join("\n");
     const parentPostId = incoming.parentId ?? incoming.id;
+    const askedToTrade = wantsTradeLink(incoming.text);
 
     const reusable = await resolveToken(sourceText, deps.provider);
     if (reusable?.status === "token") {
       const cached = await deps.store.findReusableCheck(parentPostId, reusable.mint);
-      if (cached) {
+      if (cached && cachedReplyMatchesSwap(deps, incoming.text, cached)) {
         return finishReply(deps, incoming, cached, true);
       }
     }
@@ -132,9 +134,16 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
       parentPostId,
       mentionId: incoming.id,
       askedBy: incoming.authorUsername,
+      offerSwap: askedToTrade,
     });
 
     if (!created.ok && (created.error === "no_token" || created.error === "notice")) {
+      if (askedToTrade) {
+        log("swap link omitted", {
+          reason: "token was not scored",
+          symbol: created.error === "notice" ? created.symbol : undefined,
+        });
+      }
       const notice = await createUnresolvedCheck(deps, {
         mentionId: incoming.id,
         parentPostId,
@@ -173,6 +182,25 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
 
 function claimSource(parentText: string | null, mentionText: string): string {
   return parentText?.trim() ? parentText : mentionText;
+}
+
+/** A cached reply is reusable only when it already has the swap link this mention should get. */
+function cachedReplyMatchesSwap(deps: LensDeps, mentionText: string, cached: CheckRecord): boolean {
+  const decision = decideSwapLink({
+    asked: wantsTradeLink(mentionText),
+    enabled: deps.config.xSwapLinksOnRequest,
+    publicBaseUrl: deps.config.publicBaseUrl,
+    riskLevel: cached.riskLevel,
+    mint: cached.tokenMint,
+  });
+  const hasLink = replyHasSwapLink(cached.replyText, cached.tokenMint);
+  if ((decision?.include === true) === hasLink) {
+    if (decision && !decision.include) {
+      log("swap link omitted", { reason: decision.reason, symbol: cached.tokenSymbol });
+    }
+    return true;
+  }
+  return false;
 }
 
 async function finishReply(
@@ -229,6 +257,8 @@ export async function createRiskCheck(
     mentionId?: string | null;
     askedBy?: string | null;
     now?: Date;
+    /** Mention text asked to buy, swap, or trade. Ignored unless kind is reply. */
+    offerSwap?: boolean;
   },
 ): Promise<
   | { ok: true; check: CheckRecord }
@@ -262,6 +292,16 @@ export async function createRiskCheck(
 
   const id = newId();
   const reportUrl = `${deps.config.publicBaseUrl}/r/${id}`;
+  const decision =
+    input.kind === "reply"
+      ? decideSwapLink({
+          asked: input.offerSwap === true,
+          enabled: deps.config.xSwapLinksOnRequest,
+          publicBaseUrl: deps.config.publicBaseUrl,
+          riskLevel: report.level,
+          mint: snapshot.mint,
+        })
+      : null;
   const written = await deps.writer.write({
     riskLevel: report.level,
     symbol: snapshot.symbol,
@@ -269,7 +309,17 @@ export async function createRiskCheck(
     mint: snapshot.mint,
     facts: report.facts,
     reportUrl,
+    swapUrl: decision?.include ? decision.url : undefined,
   });
+  if (decision?.include) {
+    if (written.text.includes(decision.url)) {
+      log("swap link included", { symbol: snapshot.symbol, mint: snapshot.mint });
+    } else {
+      log("swap link omitted", { reason: "reply would exceed 500 characters", symbol: snapshot.symbol });
+    }
+  } else if (decision) {
+    log("swap link omitted", { reason: decision.reason, symbol: snapshot.symbol });
+  }
   const signedAt = now;
   const proof = buildProofPayload(written.text, signedAt);
   let published: { signature: string; cluster: string };

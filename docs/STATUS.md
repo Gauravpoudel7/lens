@@ -2,7 +2,7 @@
 
 Updated after a live mainnet scoring run, real devnet memos, and a read-only X OAuth 2.0 check. “Done” means the path works without a paid key, or the live path was executed and the result is written here. Mock mode stays labeled. Secrets stay in `.env` and are not copied here.
 
-X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=true`. They do not say “Full report on our scorecard.” unless a public site is configured: set `PUBLIC_SITE_NAME`, or set `PUBLIC_BASE_URL` to a non-local host, and the closer is plain text (`Full report on <name>.`). A localhost URL does not count. The worker poll defaults to 180 seconds. Jupiter defaults to `https://api.jup.ag` (same `/swap/v1` and `/price/v3` paths, plus `GET /tokens/v2/tag?query=verified` for tickers; `JUPITER_API_KEY` is optional). `X_BOT_USER_ID` is read from the environment or from a saved cursor; `/2/users/me` runs once per process only when both are empty.
+X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=true`. They do not say “Full report on our scorecard.” unless a public site is configured: set `PUBLIC_SITE_NAME`, or set `PUBLIC_BASE_URL` to a non-local host, and the closer is plain text (`Full report on <name>.`). A localhost URL does not count. `X_SWAP_LINKS_ON_REQUEST` defaults to true. A mention that says buy, swap, or trade can then include one Blink URL for a LOW or MEDIUM token, and only when `PUBLIC_BASE_URL` is a public https URL. HIGH and unscored tickers stay link-free. Those replies still count toward the daily caps. The worker poll defaults to 180 seconds. Jupiter defaults to `https://api.jup.ag` (same `/swap/v1` and `/price/v3` paths, plus `GET /tokens/v2/tag?query=verified` for tickers; `JUPITER_API_KEY` is optional). `X_BOT_USER_ID` is read from the environment or from a saved cursor; `/2/users/me` runs once per process only when both are empty.
 
 ## PRD features
 
@@ -13,7 +13,7 @@ X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=t
 | 3 | @askLens replies | Must | Live replies sent | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. On 2026-10-07 mention reads and replies worked as @justasklens. See “Live X replies” below. A `$ticker` is scored only when Jupiter lists exactly one verified token. |
 | 4 | On-chain proof | Must | Done on devnet | Mock is still the default for `npm run demo`. Five live checks below each have a confirmed devnet memo. `POST /api/verify` matched the Bonk reply to its memo. |
 | 5 | Public scorecard | Must | Done | Home, report, win rate, label accuracy, Sharpe after two scored calls. |
-| 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. |
+| 6 | Trade button (Blink) | Should | Done | HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. `actions.json` is served with CORS. X unfurling needs Dialect registry approval. |
 | 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer | Accounts by X handle and/or wallet, watchlist, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. Card rail exists and refuses checkout. |
 
 ## Live X replies, 2026-10-07
@@ -90,12 +90,12 @@ That sample used the public RPC. `getTokenLargestAccounts` returned HTTP 429 aft
 | --- | --- | --- |
 | 1. Resolver | Done | A mint is exact. A `$ticker` needs exactly one Jupiter-verified token. DexScreener liquidity is not used to pick a symbol. |
 | 2. Risk engine | Done | Deterministic. Live fields from DexScreener, Solana RPC, RugCheck, optional Birdeye, Jupiter price. |
-| 3. Reply writer | Done | Template unless an LLM key is set and `LLM_MODE` is not `template`. Scored replies name a short mint. Unknown facts are omitted. Posted text has no URL unless `X_REPLY_LINKS=true`. The scorecard line is omitted until a public site name or URL is set. |
+| 3. Reply writer | Done | Template unless an LLM key is set and `LLM_MODE` is not `template`. Scored replies name a short mint. Unknown facts are omitted. Posted text has no URL unless `X_REPLY_LINKS=true`, or a mention asks to buy, swap, or trade and the swap-link rules allow one Blink URL. The scorecard line is omitted until a public site name or URL is set. |
 | 4. Proof | Done | Five devnet memos in the section above. `npm run demo` stays mock. |
 | 5. X bot | Live replies sent | 2026-10-07 mention reads and replies worked as @justasklens (a BONK post and an XRP post). The September read-only check for @perma_10 is still recorded below. |
 | 6. Database and outcome job | Done | SQLite by default. Postgres when `DATABASE_URL` starts with `postgres`. |
 | 7. Scorecard, report, check form, HTTP API | Done | Port 3847. `/pro` creates a Solana Pay link when `PRO_TREASURY_WALLET` is set. |
-| 8. Blink | Done | Jupiter buy path needs `DATA_MODE=live`. |
+| 8. Blink | Done | Jupiter buy path needs `DATA_MODE=live`. `GET` and `OPTIONS /actions.json` send `Access-Control-Allow-Origin: *`. Trade `GET`/`POST` follow the Actions response shapes. X feed unfurling is not live until Dialect approves the host. |
 | 9. Pro | Done in tests | Chain verifier is real code. No USDC was sent from this environment. |
 | 10. Scheduled outbound | Done in tests | Worker calls it each poll. Off unless `OUTBOUND_ENABLED=true`. |
 
@@ -125,6 +125,8 @@ The scorecard banner stays up while data or proof mode is mock.
 - Two workers can double-post. Run one worker.
 - Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.
 - Replies aim for 280 characters. The policy cap is 500. Default X copy has no URL. Set `X_REPLY_LINKS=true` to include the report link again. With links off, “Full report on …” is added only when `PUBLIC_SITE_NAME` is set or `PUBLIC_BASE_URL` is a public host. A dotted name can still be read as a link by X, so prefer a name without a domain until you want that.
+- `X_SWAP_LINKS_ON_REQUEST` defaults to true. Set it to `false` to keep trade mentions link-free. When it is on, `@justasklens buy $BONK`, `swap <mint>`, or `trade $JUP` adds exactly one `Swap:` line pointing at `https://<PUBLIC_BASE_URL>/api/actions/trade/<mint>` for LOW and MEDIUM. HIGH has no buy link. Copycats and other unscored tickers ask for the contract and get no link. Questions such as “should I buy?” and “safe to buy?” do not count. The link is omitted, and the reason is logged, when `PUBLIC_BASE_URL` is missing, http, localhost, `127.0.0.1`, another raw IP, or `*.local`. The reply still counts toward `RATE_LIMIT_PER_USER_PER_DAY` and `MAX_X_REPLIES_PER_DAY`.
+- X unfurls a Blink in the feed only after Dialect’s Actions Registry approves the host. Apply at `https://dial.to/register`. Until then the swap URL is an ordinary link. Dialect’s dial.to interstitial still renders the action, and the Solana Actions docs’ Blinks Inspector shows the GET and POST payloads. The shared URL is the Action path itself (`/api/actions/trade/<mint>`), which `actions.json` maps to itself.
 - Unknown facts (including “Creator sells could not be verified.”) stay on the report and are left out of the X reply. They are not danger. The line “Several checks could not be verified.” stays when missing data blocked a LOW.
 - A `$ticker` is not a guess. Jupiter must list exactly one verified token for that symbol. Copycats, ambiguous symbols, non-Solana majors, `$SOL`, `$USDC`, and `$USDT` get a short notice instead of a risk level. A pasted mint is still scored as that mint, including a copycat or a stablecoin.
 - `MAX_X_REPLIES_PER_DAY` defaults to 50. After that the worker stops replying until the next UTC day. Pro does not bypass it.

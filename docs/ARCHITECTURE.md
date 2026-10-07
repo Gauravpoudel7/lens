@@ -49,7 +49,7 @@ Order inside `createRiskCheck`:
 2. Load a `TokenSnapshot`.
 3. Read burned/locked claims from the parent post when there is one, otherwise from the text the user pasted.
 4. `evaluateRisk` chooses the level.
-5. The writer produces the exact reply. By default that text has no URL. It names the mint in short form (`JUPy…DvCN`) and leaves out unknown facts. A “Full report on …” line is added only when `PUBLIC_SITE_NAME` or a public `PUBLIC_BASE_URL` is set. Set `X_REPLY_LINKS=true` to include `Report: <url>` again.
+5. The writer produces the exact reply. By default that text has no URL. It names the mint in short form (`JUPy…DvCN`) and leaves out unknown facts. A “Full report on …” line is added only when `PUBLIC_SITE_NAME` or a public `PUBLIC_BASE_URL` is set. Set `X_REPLY_LINKS=true` to include `Report: <url>` again. A mention that asks to buy, swap, or trade can add one Blink URL instead, for LOW or MEDIUM only, when `X_SWAP_LINKS_ON_REQUEST` is on (the default) and `PUBLIC_BASE_URL` is public https. That string is what gets hashed.
 6. SHA-256 that string, build `lens:v1|<time>|<hash>`, publish the memo.
 7. Only after the publish succeeds, save the check. Callers post to X after that.
 
@@ -124,6 +124,8 @@ Known stake-pool mints in `risk/stake-pools.ts` (JitoSOL, mSOL, bSOL, jupSOL, IN
 
 The template tries to stay within 280 characters: header with the short mint, the sharpest short facts that fit (unknown facts omitted, except the incomplete-data line), then either “Full report on <name>.” when a public site is set, or the report URL when `X_REPLY_LINKS=true`, then the disclaimer. With no public site, that closer is omitted. `enforceReplyPolicy` strips `http`/`https`, `t.co`, and bare domains when links are off, then puts the plain-text closer back if one is configured. It does not put the report URL back. The same flag covers outbound posts and warning DMs. Blinks still link to the report.
 
+`X_SWAP_LINKS_ON_REQUEST` (default true) is a separate case. `wantsTradeLink` looks only at the mention, not the parent post. `buy`, `swap`, and `trade` count. “should I buy?”, “safe to buy?”, “don’t buy”, and words like “buying” do not. For a scored LOW or MEDIUM reply, the text gains one line, `Swap: <PUBLIC_BASE_URL>/api/actions/trade/<mint>`. That is the only URL in the reply, including when `X_REPLY_LINKS=true`. HIGH stays as it is, with no buy link. A copycat, an unverified ticker, and the non-Solana notices stay link-free. The link is added only when `PUBLIC_BASE_URL` is https and the host is not localhost, `127.0.0.1`, another raw IP, or `*.local`. Otherwise the reply is the normal link-free text and the log line is `swap link omitted` with the reason. If the line would push the reply past 500 characters, it is dropped and that reason is logged. The proof hashes the text after that decision. A cached reply is reused only when it already matches whether this mention should carry the link. Manual checks, outbound posts, and warning DMs do not get the swap line. The reply still goes through `finishReply`, so it counts toward `RATE_LIMIT_PER_USER_PER_DAY` and `MAX_X_REPLIES_PER_DAY`.
+
 ## Proof
 
 `hashReply` is SHA-256 over the UTF-8 bytes of the exact reply.
@@ -158,11 +160,15 @@ HTTP 429 and dropped connections retry with exponential backoff (`withRetry`, de
 
 ## Blink
 
-`GET /api/actions/trade/:mint` reuses a check for that mint from the last 15 minutes, or creates a `blink` check (which is proved). HIGH risk returns `disabled: true`, no `transaction` action, and a report link. POST of a HIGH token returns 403 and does not ask Jupiter for a swap.
+`GET /api/actions/trade/:mint` reuses a check for that mint from the last 15 minutes, or creates a `blink` check (which is proved). The JSON is an Action (`type: "action"`) with an absolute icon URL. HIGH risk returns `disabled: true`, no `transaction` action, and a report link. POST of a HIGH token returns 403 and `{ "message" }`. It does not ask Jupiter for a swap.
 
-Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. POST calls Jupiter at `JUPITER_BASE_URL` (default `https://api.jup.ag`) on `/swap/v1/quote` and `/swap/v1/swap`, and returns the base64 transaction. Price reads use `/price/v3` on the same host. Those paths did not change when `lite-api.jup.ag` started shutting down. Keyless requests work. `JUPITER_API_KEY`, when set, is sent as `x-api-key`. In mock data mode the swap builder returns an error string instead of a fake transaction, so a wallet is not asked to sign garbage. `JUPITER_FEE_BPS` (default 50) is sent only when `JUPITER_FEE_ACCOUNT` is set.
+Other levels return buy actions for 0.1, 0.5, and 1 SOL plus a custom amount. The custom field is `type: "number"` with min and max. POST body is `{ "account" }`. The query `amount` defaults to 0.1 and must be greater than 0 and at most 50. POST calls Jupiter at `JUPITER_BASE_URL` (default `https://api.jup.ag`) on `/swap/v1/quote` and `/swap/v1/swap`, and returns `{ "transaction", "message" }` with the base64 transaction. Price reads use `/price/v3` on the same host. Those paths did not change when `lite-api.jup.ag` started shutting down. Keyless requests work. `JUPITER_API_KEY`, when set, is sent as `x-api-key`. In mock data mode the swap builder returns an error string instead of a fake transaction, so a wallet is not asked to sign garbage. `JUPITER_FEE_BPS` (default 50) is sent only when `JUPITER_FEE_ACCOUNT` is set.
 
-`/actions.json` maps `/api/actions/**`.
+Action responses send `Access-Control-Allow-Origin: *`, methods `GET,POST,PUT,OPTIONS`, the spec allow-headers list, `Access-Control-Expose-Headers` for `X-Action-Version` and `X-Blockchain-Ids`, `Content-Type: application/json`, `X-Action-Version: 2.4`, and `X-Blockchain-Ids` for mainnet. `OPTIONS` on the trade route is a 204 preflight and does not score a token.
+
+`GET` and `OPTIONS /actions.json` return the same CORS origin header. The rule is the spec’s idempotent mapping: `/api/actions/**` to `/api/actions/**`, so the URL shared in a reply is the Action URL. A static file in `public/` did not send that header, so the route handler serves it.
+
+X unfurls an Action in the feed only after Dialect’s registry approves the host. Apply at `https://dial.to/register`. An unregistered URL stays a normal link. Dialect’s dial.to interstitial still renders it, and the Solana Actions docs’ Blinks Inspector shows the GET and POST payloads while you wait. Wallets that use an allow list behave the same way until the host is registered.
 
 ## Scoring
 

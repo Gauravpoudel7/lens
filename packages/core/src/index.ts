@@ -29,6 +29,7 @@ export * from "./outcomes.js";
 export * from "./pipeline.js";
 export * from "./poll.js";
 export * from "./blink.js";
+export * from "./swap.js";
 export * from "./accounts.js";
 export * from "./net/retry.js";
 export * from "./billing/solana-pay.js";

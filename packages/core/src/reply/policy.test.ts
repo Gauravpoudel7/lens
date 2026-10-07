@@ -159,6 +159,36 @@ describe("reply policy", () => {
     expect(text.endsWith("Not financial advice.")).toBe(true);
   });
 
+  it("keeps exactly one blink URL when a swap link is requested", () => {
+    const swapUrl =
+      "https://asklens.com/api/actions/trade/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+    const draft = {
+      ...input,
+      riskLevel: "LOW" as const,
+      symbol: "BONK",
+      mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      siteLabel: "Lens",
+      swapUrl,
+    };
+    const text = buildTemplateReply(draft);
+    expect(text.match(/https?:\/\/\S+/g)).toEqual([swapUrl]);
+    expect(text).toContain("Full report on Lens.");
+    expect(text).toContain("$BONK (DezX…B263): LOW risk.");
+    expect(text.endsWith("Not financial advice.")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(500);
+
+    const repaired = enforceReplyPolicy(
+      `LOW risk. See https://evil.example/phish and https://asklens.com/r/abc\nNot financial advice.`,
+      draft,
+    );
+    expect(repaired.ok).toBe(true);
+    if (!repaired.ok) return;
+    expect(repaired.text.match(/https?:\/\/\S+/g)).toEqual([swapUrl]);
+    expect(repaired.text).not.toContain("evil.example");
+    expect(repaired.text).not.toContain("/r/abc");
+    expect(repaired.text.endsWith("Not financial advice.")).toBe(true);
+  });
+
   it("keeps ticker notices inside the wording rules", () => {
     const notices = [
       ambiguousTickerReply("JUP"),

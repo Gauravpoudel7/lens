@@ -92,6 +92,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `X_BEARER_TOKEN` | empty | Optional app-only read of a parent post. Cannot post or send a DM |
 | `X_BOT_USER_ID` | empty | Optional at runtime. If empty, the worker calls `/2/users/me` once at startup, caches the id, and logs a hint to set this. `npm run doctor` wants it set before go-live |
 | `X_REPLY_LINKS` | `false` | `true` puts `Report: <url>` back in replies, outbound posts, and warning DMs. Off by default because X bills a URL much higher |
+| `X_SWAP_LINKS_ON_REQUEST` | `true` | A mention that says buy, swap, or trade gets one Blink URL when the verdict is LOW or MEDIUM and `PUBLIC_BASE_URL` is public https. HIGH and unscored tickers stay link-free. Set `false` to turn that off. These replies still count toward the daily caps |
 | `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
 | `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day. Pro accounts skip this |
 | `MAX_X_REPLIES_PER_DAY` | `50` | Bot-wide replies per UTC day. The worker stops replying when it is reached. Pro does not skip it |
@@ -169,8 +170,10 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 - `GET /api/stats`
 - `POST /api/verify` and `GET /api/verify?text=&signature=`
 - `GET /api/actions/trade/:mint` Solana Action. HIGH risk returns a warning and no buy. Other levels return Jupiter buy actions when `DATA_MODE=live`.
-- `POST /api/actions/trade/:mint?amount=0.1` with `{ "account": "<wallet>" }`
-- `GET /actions.json`
+- `POST /api/actions/trade/:mint?amount=0.1` with `{ "account": "<wallet>" }` returns `{ "transaction", "message" }`.
+- `GET /actions.json` and `OPTIONS /actions.json` map `/api/actions/**` to itself and send `Access-Control-Allow-Origin: *`.
+
+X does not unfurl that Blink in the feed until the host is in Dialect's Actions Registry. Apply at [https://dial.to/register](https://dial.to/register). Until then the URL is an ordinary link. Wallets can still open it, and Dialect's dial.to interstitial will render the action. The Solana Actions docs describe the Blinks Inspector for checking the GET and POST payloads before you apply.
 - `GET /api/health` returns `ok`, modes, and `db`
 
 How to obtain each key is in [docs/KEYS.md](docs/KEYS.md). How to run the Docker image on Railway, Fly, or Render is in [DEPLOY.md](DEPLOY.md).

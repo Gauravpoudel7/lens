@@ -15,6 +15,11 @@ export interface ReplyDraftInput {
    * Empty omits the closer. A hostname here is text, not a URL.
    */
   siteLabel?: string | null;
+  /**
+   * Blink trade URL for a mention that asked to buy, swap, or trade.
+   * When set, this is the only URL in the reply.
+   */
+  swapUrl?: string | null;
 }
 
 export const DISCLAIMER = "Not financial advice.";
@@ -76,9 +81,9 @@ export function publicSiteLabel(config: { publicSiteName?: string; publicBaseUrl
 }
 
 export function closerLine(
-  input: Pick<ReplyDraftInput, "includeLinks" | "reportUrl" | "siteLabel">,
+  input: Pick<ReplyDraftInput, "includeLinks" | "reportUrl" | "siteLabel" | "swapUrl">,
 ): string | null {
-  if (linksRequested(input)) return `Report: ${input.reportUrl}`;
+  if (!input.swapUrl && linksRequested(input)) return `Report: ${input.reportUrl}`;
   const label = input.siteLabel?.trim();
   if (!label) return null;
   return `Full report on ${label}.`;
@@ -98,6 +103,7 @@ export function stripReplyUrls(text: string): string {
 export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): string {
   const header = replyHeader(input.symbol, input.riskLevel, input.mint);
   const closer = closerLine(input);
+  const swapUrl = input.swapUrl?.trim() || null;
   const ranked = factsForReply(input.facts).sort((a, b) => {
     const bySignal = SIGNAL_RANK[b.signal] - SIGNAL_RANK[a.signal];
     if (bySignal !== 0) return bySignal;
@@ -108,25 +114,31 @@ export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): str
   const shorts = ranked.map((fact) => fact.short.trim()).filter(Boolean);
   const chosen: string[] = [];
   for (const short of shorts) {
-    const candidate = render(header, [...chosen, short], closer);
+    const candidate = render(header, [...chosen, short], closer, swapUrl);
     if (candidate.length <= maxLength) chosen.push(short);
     else break;
   }
+  let text: string;
   if (chosen.length === 0 && shorts[0]) {
     let fact = shorts[0];
-    let text = render(header, [fact], closer);
+    text = render(header, [fact], closer, swapUrl);
     while (text.length > 500 && fact.length > 24) {
       fact = `${fact.slice(0, fact.length - 8).trim()}…`;
-      text = render(header, [fact], closer);
+      text = render(header, [fact], closer, swapUrl);
     }
-    return text;
+  } else {
+    text = render(header, chosen, closer, swapUrl);
   }
-  return render(header, chosen, closer);
+  if (swapUrl && text.length > 500) {
+    return buildTemplateReply({ ...input, swapUrl: undefined }, maxLength);
+  }
+  return text;
 }
 
-function render(header: string, facts: string[], closer: string | null): string {
+function render(header: string, facts: string[], closer: string | null, swapUrl: string | null): string {
   const lines = [header, ...facts.map((fact) => `• ${fact}`)];
   if (closer) lines.push(closer);
+  if (swapUrl) lines.push(`Swap: ${swapUrl}`);
   lines.push(DISCLAIMER);
   return lines.join("\n");
 }
@@ -152,7 +164,8 @@ export function enforceReplyPolicy(
     return { ok: false, text, reason: "risk level" };
   }
 
-  if (linksRequested(input)) {
+  const swapOnly = Boolean(input.swapUrl?.trim());
+  if (!swapOnly && linksRequested(input)) {
     if (!text.includes(input.reportUrl)) {
       text = text.replace(/\s*Not financial advice\.?\s*$/i, "").trim();
       text = `${text}\nReport: ${input.reportUrl}`;
@@ -166,16 +179,44 @@ export function enforceReplyPolicy(
 
   text = text.replace(/\s*Not financial advice\.?\s*$/i, "").trim();
   text = ensureShortMint(text, input.mint);
-  if (!linksRequested(input)) {
+  if (swapOnly || !linksRequested(input)) {
     text = stripReportLines(text);
     const closer = closerLine(input);
     if (closer) text = text ? `${text}\n${closer}` : closer;
   }
   text = `${text}\n${DISCLAIMER}`;
+  text = placeSwapLine(text, input.swapUrl);
 
   if (text.length > 500) return { ok: false, text, reason: "too long" };
   if (/\bscam\b/i.test(text)) return { ok: false, text, reason: "scam" };
   return { ok: true, text };
+}
+
+/** Puts the Blink URL above the disclaimer. Drops it when the reply would pass 500 characters. */
+function placeSwapLine(text: string, swapUrl?: string | null): string {
+  const url = swapUrl?.trim();
+  if (!url) return text;
+  const line = `Swap: ${url}`;
+  const stripped = text
+    .split("\n")
+    .filter((row) => {
+      const trimmed = row.trim();
+      if (/^Swap:\s*/i.test(trimmed)) return false;
+      return !trimmed.includes(url);
+    })
+    .join("\n")
+    .trim();
+  let next: string;
+  if (stripped.endsWith(DISCLAIMER)) {
+    const body = stripped.slice(0, -DISCLAIMER.length).trim();
+    next = body ? `${body}\n${line}\n${DISCLAIMER}` : `${line}\n${DISCLAIMER}`;
+  } else {
+    next = stripped ? `${stripped}\n${line}` : line;
+  }
+  if (next.length > 500) return stripped;
+  const copies = next.split(url).length - 1;
+  if (copies !== 1) return stripped;
+  return next;
 }
 
 function stripReportLines(text: string): string {

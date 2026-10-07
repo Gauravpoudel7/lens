@@ -31,7 +31,9 @@ type WriterConfig = Pick<
 
 function systemPrompt(input: ReplyDraftInput): string {
   const lines = [...SYSTEM_SHARED];
-  if (input.includeLinks) {
+  if (input.swapUrl) {
+    lines.push("Do not include any URL. A swap link is added after you write.");
+  } else if (input.includeLinks) {
     lines.push("At most three short lines plus the report link.");
   } else {
     lines.push("Do not include any URL, t.co link, or domain name.");

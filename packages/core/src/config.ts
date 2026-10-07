@@ -56,6 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     xBearerToken: clean(env.X_BEARER_TOKEN),
     xBotUserId: clean(env.X_BOT_USER_ID),
     xReplyLinks: clean(env.X_REPLY_LINKS)?.toLowerCase() === "true",
+    xSwapLinksOnRequest: clean(env.X_SWAP_LINKS_ON_REQUEST)?.toLowerCase() !== "false",
     xOauth2ClientId: clean(env.X_OAUTH2_CLIENT_ID),
     xOauth2ClientSecret: clean(env.X_OAUTH2_CLIENT_SECRET),
     xOauth2AccessToken: clean(env.X_OAUTH2_ACCESS_TOKEN),

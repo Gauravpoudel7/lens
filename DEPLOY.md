@@ -2,7 +2,7 @@
 
 The app is one Next.js server and one worker. They share a database. SQLite is the zero-config default and is fine for a single machine. Use Postgres when web and worker run as two containers, because two processes writing one SQLite file will lock.
 
-Proofs still default to devnet. Token reads and USDC payments use mainnet. Set `PUBLIC_BASE_URL` to the https URL users will open. The scorecard and Blinks use that URL. X replies, outbound posts, and warning DMs leave the URL out unless `X_REPLY_LINKS=true`, because a URL in an X post is billed much higher. Once that URL is a public host, link-free posts add a plain-text line, `Full report on <host>.` Set `PUBLIC_SITE_NAME` to override the host, or leave both local to omit the line. The hashed proof is still the exact text that was posted.
+Proofs still default to devnet. Token reads and USDC payments use mainnet. Set `PUBLIC_BASE_URL` to the https URL users will open. The scorecard and Blinks use that URL. X replies, outbound posts, and warning DMs leave the URL out unless `X_REPLY_LINKS=true`, because a URL in an X post is billed much higher. Once that URL is a public host, link-free posts add a plain-text line, `Full report on <host>.` Set `PUBLIC_SITE_NAME` to override the host, or leave both local to omit the line. The hashed proof is still the exact text that was posted. `X_SWAP_LINKS_ON_REQUEST` defaults to true: a mention that asks to buy, swap, or trade then includes one Blink URL for a LOW or MEDIUM token, and only when `PUBLIC_BASE_URL` is a public https URL. Register that host at `https://dial.to/register` if you want X to unfurl the action. Set the flag to `false` to keep those replies link-free too.
 
 Secrets go in the host's env, not in the image. See [docs/KEYS.md](docs/KEYS.md).
 
@@ -57,6 +57,7 @@ X_OAUTH2_ACCESS_TOKEN=
 X_OAUTH2_REFRESH_TOKEN=
 X_BOT_USER_ID=
 X_REPLY_LINKS=false
+# X_SWAP_LINKS_ON_REQUEST=true
 POLL_INTERVAL_MS=180000
 MAX_X_REPLIES_PER_DAY=50
 ```
