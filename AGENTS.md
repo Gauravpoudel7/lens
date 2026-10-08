@@ -1,6 +1,6 @@
 # Agents
 
-You are continuing Lens, the @askLens Solana risk bot. Read `docs/STATUS.md` and `docs/ARCHITECTURE.md` before editing. The product promise is a public record that cannot be quietly rewritten. Do not weaken that to make a demo look better.
+You are continuing Lens, the @justasklens Solana risk bot. Read `docs/STATUS.md` and `docs/ARCHITECTURE.md` before editing. The product promise is a public record that cannot be quietly rewritten. Do not weaken that to make a demo look better.
 
 ## How to run
 

@@ -47,7 +47,7 @@ if (!existing || existing.status === "processing" || existing.status === "error"
     id: mentionId,
     authorId: "demo-user",
     authorUsername: "trader_joe",
-    text: "@askLens is this legit?",
+    text: "@justasklens is this legit?",
     parentId,
   });
   mentionCheckId = result.checkId;

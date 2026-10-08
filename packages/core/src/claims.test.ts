@@ -10,7 +10,7 @@ describe("claim extraction", () => {
   });
 
   it("ignores questions and negated claims", () => {
-    expect(extractClaims("@askLens is the LP locked?")).toEqual({ burned: false, locked: false });
+    expect(extractClaims("@justasklens is the LP locked?")).toEqual({ burned: false, locked: false });
     expect(extractClaims("Liquidity is not locked. Supply was never burned.")).toEqual({
       burned: false,
       locked: false,
@@ -18,7 +18,7 @@ describe("claim extraction", () => {
   });
 
   it("uses the parent post, not the question under it", () => {
-    expect(claimsFromPosts("Dev says LP locked and burned", "@askLens is this legit?")).toEqual({
+    expect(claimsFromPosts("Dev says LP locked and burned", "@justasklens is this legit?")).toEqual({
       burned: true,
       locked: true,
     });
