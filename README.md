@@ -172,7 +172,7 @@ Do not commit that drift.
 | `npm run discover` | One outbound pass. No-op unless `OUTBOUND_ENABLED=true` |
 | `npm run live:sample` | Read BONK and one current pump.fun token from mainnet |
 | `npm run x:oauth2-login` | Browser PKCE login that saves X OAuth 2.0 user tokens |
-| `npm run doctor` | Check config before going live. No posts. Add `-- --x` for one `users/me` read |
+| `npm run doctor` | Check every setting before going live: X, RPCs, modes, proof wallet balance, session secret, Pro network and USDC mint. Each line names the variable to set. No posts. Add `-- --x` for one `users/me` read |
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
@@ -308,9 +308,12 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 
 - `POST /api/check` `{ "input": "<mint, ticker, or post text>", "wallet"?: "<pro wallet>" }`
 - `POST /api/pro/checkout` `{ "wallet" }` returns a Solana Pay URL. A handle is refused; X is linked by DM code after payment
-- `POST /api/pro/confirm` `{ "reference" }` checks the USDC transfer and flips Pro
-- `GET /api/pro/account?handle=&wallet=` returns only whether that handle is Pro, unless the query also has a wallet signature (`proofWallet`, `nonce`, `expiresAt`, `signature`) from `POST /api/pro/nonce`
-- `POST /api/pro/watch` and `DELETE` need that same signature, and the account has to be Pro for both
+- `POST /api/pro/checkout/tx` `{ "reference", "account" }` returns the unsigned USDC transfer (base64) and the payment network, after checking balances and simulating it on `PRO_RPC_URL`
+- `GET /api/pro/network` returns `mainnet-beta`, `devnet`, or `unknown` from the genesis hash of `PRO_RPC_URL`
+- `POST /api/pro/confirm` `{ "reference" }` checks the USDC transfer and flips Pro. Not paid yet is HTTP 202 with `reason: "pending"`. The reply carries only the paying wallet
+- `POST /api/pro/nonce` `{ "wallet" }`, then `POST /api/pro/session` `{ "wallet", "nonce", "expiresAt", "signature" }` sets a 24-hour httpOnly `lens_session` cookie. `DELETE /api/pro/session` signs out
+- `GET /api/pro/account` with the cookie returns that wallet's plan, link code, and watchlist. With `?handle=` or `?wallet=` it returns only whether that account is Pro
+- `POST /api/pro/watch` and `DELETE` `{ "mint" }` need the cookie of an active Pro wallet and a same-site `Origin`
 - `GET /api/calls`
 - `GET /api/calls/:id`
 - `GET /api/stats`
@@ -335,7 +338,7 @@ The public check form, `/api/verify`, and the Blink trade route share an hourly 
 
 Pro is bought by wallet. `POST /api/pro/checkout` takes `{ "wallet" }` only and refuses a handle. After the transfer confirms, the wallet owner signs once on `/account` and sees a one-time code (`LENS-XXXX-XXXX`, 24 hours). The code is never returned without that signature, because the Solana Pay reference is public on-chain and anyone can call confirm. The owner DMs the code to the bot. The worker reads DMs (`GET /2/dm_events`) only while some paid account has an open code, and at most every `X_DM_POLL_MS` (default and minimum 180000). A valid code links the sending X user id and handle to the paid account and the bot replies once: “Linked. Lens Pro is on for @handle.” Wrong, expired, and already-used codes get a short reply; after 5 failures in a UTC day an X account's DMs are ignored. A code from an X account or handle that already belongs to another wallet is refused. An older wallet-less record for the same handle is folded into the paid account. Nothing else links a handle: mentions never attach an X id, and Pro perks (no daily cap, warning DMs) need that DM link.
 
-`/account` shows whether a handle is Pro to anyone. Wallet, X id, expiry, and the watchlist need a signed message from that wallet (`Lens account proof`, nonce, expiry). The same signature is required to add or remove a watch. Warning DMs are limited to one per watcher per mint per UTC day, 10 per watcher per day, and 100 for the bot per day.
+`/account` shows whether a handle or wallet is Pro to anyone. Wallet, X id, expiry, the link code, and the watchlist need a signed message from that wallet (`Lens account proof`, single-use nonce, expiry), which starts a 24-hour session cookie. The same session is required to add or remove a watch. Warning DMs are limited to one per watcher per mint per UTC day, `ALERT_DMS_PER_USER_PER_DAY` (10) per watcher per day, and `ALERT_DMS_PER_DAY` (100) for the bot per day.
 
 The home record and `/api/stats` count replies and outbound posts (`reply`, `call`, `warning`, `note`). Blink loads and the web form stay on their own report URLs so they cannot push those rows out of the last 500.
 
