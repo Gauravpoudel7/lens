@@ -4,19 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ApertureMark } from "@/components/logo";
-
-const NAV = [
-  { href: "/", label: "Record" },
-  { href: "/check", label: "Check" },
-  { href: "/verify", label: "Verify" },
-  { href: "/pro", label: "Pro" },
-  { href: "/account", label: "Account" },
-];
-
-function isCurrent(path: string, href: string): boolean {
-  if (href === "/") return path === "/" || path.startsWith("/r/");
-  return path === href || path.startsWith(`${href}/`);
-}
+import { NAV, isCurrent } from "@/lib/nav";
 
 export function SiteHeader() {
   const path = usePathname();
@@ -50,7 +38,7 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={current ? "page" : undefined}
-                className={`rounded-md px-3 py-1.5 text-sm ${
+                className={`rounded-md px-3 py-1.5 text-base ${
                   current ? "text-ink underline decoration-accent decoration-2 underline-offset-8" : "text-muted hover:text-ink"
                 }`}
               >
@@ -60,12 +48,12 @@ export function SiteHeader() {
           })}
         </nav>
         <div className="flex items-center gap-2 md:hidden">
-          <Link href="/check" className="rounded-full bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink">
-            Check
+          <Link href="/check" className="rounded-full bg-accent px-3 py-1.5 text-base font-semibold text-accent-ink">
+            Check a token
           </Link>
           <button
             type="button"
-            className="rounded-md border border-line px-3 py-1.5 text-sm"
+            className="rounded-md border border-line px-3 py-1.5 text-base"
             aria-expanded={open}
             aria-controls="site-menu"
             onClick={() => setOpen((value) => !value)}
@@ -84,7 +72,9 @@ export function SiteHeader() {
                   <Link
                     href={item.href}
                     aria-current={current ? "page" : undefined}
-                    className={`block rounded-md px-2 py-2 text-base ${current ? "text-ink" : "text-muted"}`}
+                    className={`block rounded-md px-2 py-2 text-base ${
+                      current ? "text-ink underline decoration-accent decoration-2 underline-offset-8" : "text-muted"
+                    }`}
                   >
                     {item.label}
                   </Link>

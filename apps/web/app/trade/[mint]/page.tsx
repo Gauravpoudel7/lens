@@ -23,9 +23,9 @@ const DOT = { danger: "bg-high", caution: "bg-med", good: "bg-low", unknown: "bg
 
 const ERRORS: Record<Exclude<TradeCheckResult, { check: object }>["error"], string> = {
   rate_limited: "Too many checks. Try again later.",
-  token_not_found: "Token not found.",
-  proof_failed: "Could not prove this check. Try again soon.",
-  unavailable: "Lens could not score this token.",
+  token_not_found: "Token not found. Check the address.",
+  proof_failed: "The check could not be stamped. Try again in a minute.",
+  unavailable: "Lens could not rate this token. Try again in a minute.",
 };
 
 async function load(mint: string): Promise<TradeCheckResult> {
@@ -56,8 +56,8 @@ function Message({ title, mint }: { title: string; mint?: string }) {
     <Shell>
       <div className="rounded-3xl border border-line bg-panel px-6 py-10 text-center">
         <p className="text-lg font-semibold text-ink">{title}</p>
-        {mint ? <p className="mt-2 break-all font-mono text-xs text-faint">{mint}</p> : null}
-        <Link href="/check" className="mt-6 inline-block text-sm text-faint underline-offset-4 hover:text-ink hover:underline">
+        {mint ? <p className="mt-2 break-all font-mono text-sm text-faint">{mint}</p> : null}
+        <Link href="/check" className="mt-6 inline-block text-base text-accent-text underline-offset-4 hover:text-ink hover:underline">
           Check a token
         </Link>
       </div>
@@ -76,14 +76,14 @@ function Action({ view }: { view: TradeView }) {
     return (
       <div className="rounded-2xl border border-high/40 bg-high-bg px-5 py-4" role="status">
         <p className="font-semibold text-high">{view.level === "HIGH" ? "High risk. No buy link." : "Not scored. No buy link."}</p>
-        <p className="mt-1 text-sm text-muted">Read the full report first.</p>
+        <p className="mt-1 text-base text-muted">Read the full report first.</p>
       </div>
     );
   }
   const medium = view.level === "MEDIUM";
   return (
     <div>
-      {medium ? <p className="mb-2.5 text-sm text-med">Buy with care</p> : null}
+      {medium ? <p className="mb-2.5 text-base text-med">Medium risk. Read the report first.</p> : null}
       <Button asChild variant={medium ? "outline" : "default"} className="h-14 w-full text-base">
         <a href={view.buyUrl} target="_blank" rel="noopener noreferrer">
           Buy on Jupiter
@@ -114,14 +114,14 @@ export default async function TradePage({ params }: { params: Promise<{ mint: st
           <h1 className="truncate text-2xl font-semibold tracking-tight text-ink">${view.symbol}</h1>
           <div className="-ml-2 flex items-center">
             <span className="pl-2 font-mono text-sm text-faint">{view.shortMint}</span>
-            <CopyButton value={view.mint} label="Copy mint" icon />
+            <CopyButton value={view.mint} label="Copy token address" icon />
           </div>
         </div>
       </header>
 
       <section aria-label="Risk level" className={`mt-5 rounded-3xl border px-6 py-5 ${tone.box}`}>
         <p className={`text-5xl font-semibold tracking-tight ${tone.text}`}>{view.level === "NONE" ? "—" : view.level}</p>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-base text-muted">
           <time dateTime={view.checkedAt}>{checkedAgo(view.checkedAt)}</time>
         </p>
       </section>
@@ -141,7 +141,7 @@ export default async function TradePage({ params }: { params: Promise<{ mint: st
         <Action view={view} />
       </div>
 
-      <p className="mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-faint">
+      <p className="mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-base text-faint">
         <Link href={view.reportPath} className="underline-offset-4 hover:text-ink hover:underline">
           Full report
         </Link>

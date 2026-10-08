@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { runCheck } from "@/lib/check-client";
 import { tickerNoticeTitle } from "@/lib/notices";
 
 export function CheckForm({
   examples,
+  hourlyLimit,
 }: {
   examples: Array<{ label: string; value: string }>;
+  hourlyLimit: number;
 }) {
   const router = useRouter();
   const [input, setInput] = useState("");
@@ -19,38 +22,22 @@ export function CheckForm({
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const value = input.trim();
-    if (!value) {
-      setError({ kind: "error", text: "Paste a token address, a $ticker, or the text of a post." });
-      return;
-    }
     setPending(true);
     setError(null);
-    try {
-      const response = await fetch("/api/check", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: value }),
-      });
-      const body = (await response.json()) as { id?: string; error?: string };
-      if (!response.ok || !body.id) {
-        const text = body.error ?? "The check did not finish.";
-        setError({ kind: response.status === 422 ? "notice" : "error", text });
-        setPending(false);
-        return;
-      }
-      router.push(`/r/${body.id}`);
-    } catch {
-      setError({ kind: "error", text: "The check request failed. Is the server still running?" });
-      setPending(false);
+    const outcome = await runCheck(input);
+    if ("id" in outcome) {
+      router.push(`/r/${outcome.id}`);
+      return;
     }
+    setError(outcome);
+    setPending(false);
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-line bg-panel p-5">
+    <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-line bg-panel p-5">
       <div>
-        <label htmlFor="token-input" className="text-sm text-muted">
-          Post text or token address
+        <label htmlFor="token-input" className="text-base text-muted">
+          Token address (mint), $ticker, or post text
         </label>
         <Textarea
           id="token-input"
@@ -58,35 +45,40 @@ export function CheckForm({
           className="mt-2"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Paste a Solana mint, or a post that names $TICKER"
+          placeholder="e.g. $BONK, or a token address"
           disabled={pending}
         />
       </div>
-      <div className="flex flex-wrap gap-2">
-        {examples.map((example) => (
-          <Button
-            key={example.label}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setInput(example.value);
-              setError(null);
-            }}
-          >
-            {example.label}
-          </Button>
-        ))}
-      </div>
+      {examples.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {examples.map((example) => (
+            <Button
+              key={example.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setInput(example.value);
+                setError(null);
+              }}
+            >
+              {example.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
       {error?.kind === "notice" ? (
         <Notice tone="info" title={tickerNoticeTitle(error.text)}>
           <p className="whitespace-pre-line">{error.text}</p>
         </Notice>
       ) : null}
       {error?.kind === "error" ? <Notice tone="bad">{error.text}</Notice> : null}
-      <Button type="submit" disabled={pending}>
-        {pending ? "Checking…" : "Run the check"}
-      </Button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Checking…" : "Check token"}
+        </Button>
+        <p className="text-base text-faint">Free: {hourlyLimit} checks an hour.</p>
+      </div>
     </form>
   );
 }

@@ -16,7 +16,7 @@ export function Notice({
           ? "border-med/40 bg-med-bg text-med"
           : "border-line bg-panel text-muted";
   return (
-    <div className={`rounded-xl border px-3 py-3 text-sm leading-6 ${box}`} role={tone === "bad" ? "alert" : "status"}>
+    <div className={`rounded-xl border px-4 py-3 text-base leading-7 ${box}`} role={tone === "bad" ? "alert" : "status"}>
       {title ? <p className="font-semibold text-ink">{title}</p> : null}
       <div className={title ? "mt-1" : undefined}>{children}</div>
     </div>

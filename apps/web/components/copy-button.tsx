@@ -33,7 +33,7 @@ export function CopyButton({ value, label = "Copy", icon = false }: { value: str
     <button
       type="button"
       onClick={onCopy}
-      className="rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:text-ink"
+      className="rounded-md border border-line px-2.5 py-1 text-sm text-muted hover:text-ink"
     >
       <span className="sr-only">{label} </span>
       {copied ? "Copied" : label}

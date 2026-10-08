@@ -45,6 +45,10 @@ export function TokenLogo({
       height={size}
       className="shrink-0 rounded-full border border-line bg-panel-2 object-cover"
       onError={() => setIndex((current) => current + 1)}
+      // An image that failed before hydration never fires onError, so check it once on mount.
+      ref={(node) => {
+        if (node?.complete && node.naturalWidth === 0) setIndex((current) => current + 1);
+      }}
     />
   );
 }

@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, Newsreader, Source_Sans_3 } from "next/font/google";
 import { ModeNotice } from "@/components/mode-notice";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { publicConfig } from "@/lib/public-config";
 import "./globals.css";
 
 const sans = Source_Sans_3({
@@ -24,26 +25,16 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 
-const DESCRIPTION =
-  "Tag @justasklens on X under any Solana coin. Lens checks the risk, stamps the answer on Solana, and keeps a public track record.";
-
-export const metadata: Metadata = {
-  title: {
-    default: "Lens",
-    template: "%s · Lens",
-  },
-  description: DESCRIPTION,
-  openGraph: {
-    title: "Lens",
-    description: DESCRIPTION,
-    siteName: "Lens",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Lens",
-    description: DESCRIPTION,
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { xBotHandle } = await publicConfig();
+  const description = `Is this Solana token risky? Ask @${xBotHandle} on X or check it here. Every answer is stamped on Solana.`;
+  return {
+    title: { default: "Lens", template: "%s · Lens" },
+    description,
+    openGraph: { title: "Lens", description, siteName: "Lens" },
+    twitter: { card: "summary_large_image", title: "Lens", description },
+  };
+}
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

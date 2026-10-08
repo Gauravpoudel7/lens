@@ -40,42 +40,46 @@ export function VerifyForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ text, signature: signature.trim() }),
       });
-      const body = (await response.json()) as VerifyBody;
-      setResult(body);
+      const body = (await response.json().catch(() => ({}))) as VerifyBody;
+      setResult(
+        response.ok || body.reason
+          ? body
+          : { error: body.error ?? "Something went wrong on our side. Try again in a minute." },
+      );
     } catch {
-      setResult({ error: "Verification request failed." });
+      setResult({ error: "Lens could not be reached. Check your connection and try again." });
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-line bg-panel p-5">
+    <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-line bg-panel p-5">
       <div>
-        <label htmlFor="proof-text" className="text-sm text-muted">
-          Exact reply text
+        <label htmlFor="proof-text" className="text-base text-muted">
+          Reply text, exactly as posted
         </label>
         <Textarea id="proof-text" className="mt-2" value={text} onChange={(event) => setText(event.target.value)} />
       </div>
       <div>
-        <label htmlFor="proof-sig" className="text-sm text-muted">
-          Transaction signature
+        <label htmlFor="proof-sig" className="text-base text-muted">
+          Solana transaction signature
         </label>
         <input
           id="proof-sig"
           value={signature}
           onChange={(event) => setSignature(event.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-line bg-paper px-3 font-mono text-sm text-ink outline-none placeholder:text-faint"
-          placeholder="mock_… or a Solana signature"
+          className="mt-2 h-11 w-full rounded-xl border border-line bg-paper px-3 font-mono text-base text-ink outline-none placeholder:text-faint focus-visible:border-ink"
+          placeholder="From the report page"
         />
       </div>
       <Button type="submit" disabled={pending}>
-        {pending ? "Checking…" : "Verify"}
+        {pending ? "Checking…" : "Verify reply"}
       </Button>
       {result?.error ? <Notice tone="bad">{result.error}</Notice> : null}
       {result && !result.error ? (
         <div
-          className={`rounded-xl border px-3 py-3 text-sm ${
+          className={`rounded-xl border px-4 py-3 text-base ${
             result.ok ? "border-low/40 bg-low-bg text-low" : "border-high/40 bg-high-bg text-high"
           }`}
           role="status"
@@ -85,9 +89,9 @@ export function VerifyForm({
             {result.ok ? "Verified" : "No match"}
           </p>
           <p className="mt-1">{result.reason}</p>
-          {result.hash ? <p className="mt-2 break-all font-mono text-xs text-ink">{result.hash}</p> : null}
-          {result.signedAt ? <p className="mt-1 text-xs text-muted">Memo time {result.signedAt}</p> : null}
-          {result.cluster ? <p className="text-xs text-muted">Cluster {result.cluster}</p> : null}
+          {result.hash ? <p className="mt-2 break-all font-mono text-sm text-ink">{result.hash}</p> : null}
+          {result.signedAt ? <p className="mt-1 text-sm text-muted">Stamped {result.signedAt}</p> : null}
+          {result.cluster ? <p className="text-sm text-muted">Network {result.cluster}</p> : null}
         </div>
       ) : null}
     </form>

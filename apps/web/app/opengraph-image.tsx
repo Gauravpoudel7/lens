@@ -1,10 +1,12 @@
 import { ImageResponse } from "next/og";
+import { publicConfig } from "@/lib/public-config";
 
-export const alt = "Lens — tag @justasklens. The answer is stamped on Solana.";
+export const alt = "Lens: is this Solana token risky? The answer is stamped on Solana.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function OpenGraphImage() {
+export default async function OpenGraphImage() {
+  const { xBotHandle } = await publicConfig();
   return new ImageResponse(
     (
       <div
@@ -37,10 +39,10 @@ export default function OpenGraphImage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "18px", maxWidth: "980px" }}>
           <div style={{ fontSize: "64px", lineHeight: 1.05, letterSpacing: "-0.03em" }}>
-            Tag @justasklens under any Solana coin.
+            Is this Solana token risky? Ask @{xBotHandle}.
           </div>
           <div style={{ fontSize: "28px", color: "#c5cfc8" }}>
-            Lens checks the risk, stamps the answer on Solana, and keeps a public track record.
+            Every answer is stamped on Solana and kept on a public record.
           </div>
         </div>
       </div>

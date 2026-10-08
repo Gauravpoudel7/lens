@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { SESSION_COOKIE, logError, signSession, verifySession, verifyWalletProof, type LensConfig } from "@lens/core";
+import { SESSION_COOKIE, log, signSession, verifySession, verifyWalletProof, type LensConfig } from "@lens/core";
 import { getRuntime } from "./runtime";
 import { walletNonces } from "./wallet-nonce";
 
@@ -36,7 +36,7 @@ function sessionSecret(config: Pick<LensConfig, "sessionSecret">): string {
   if (config.sessionSecret) return config.sessionSecret;
   if (!globalForSecret.lensSessionSecret) {
     globalForSecret.lensSessionSecret = randomBytes(32).toString("hex");
-    logError("LENS_SESSION_SECRET is not set", { detail: "Using a random key. Sessions end when the app restarts." });
+    log("LENS_SESSION_SECRET is not set", { detail: "Using a random key. Sessions end when the app restarts." });
   }
   return globalForSecret.lensSessionSecret;
 }
