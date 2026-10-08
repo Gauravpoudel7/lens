@@ -38,6 +38,7 @@ export * from "./net/retry.js";
 export * from "./net/rpc.js";
 export * from "./net/rate-limit.js";
 export * from "./auth/wallet-proof.js";
+export * from "./auth/session.js";
 export * from "./reply/sanitize.js";
 export * from "./billing/solana-pay.js";
 export * from "./billing/chain.js";

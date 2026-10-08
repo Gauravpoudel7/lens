@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Notice } from "@/components/notice";
+import { useRouter } from "next/navigation";
 import { CopyButton } from "@/components/copy-button";
+import { Notice } from "@/components/notice";
+import { COLUMNS } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatTime, formatUsdc, shortMint } from "@/lib/format";
+import { RequestError, sendJson, signInWithWallet } from "@/lib/wallet-client";
 
 type Watch = { id: string; mint: string; symbol: string };
 
-type Proof = { wallet: string; nonce: string; expiresAt: number; signature: string };
-
 type AccountBody = {
-  error?: string;
   user?: {
     xHandle: string | null;
     wallet: string | null;
@@ -27,160 +27,118 @@ type AccountBody = {
   public?: { pro: boolean; handle: string | null } | null;
 };
 
-const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const CARD = "rounded-2xl border border-line bg-panel p-5";
 
-function encodeBase58(bytes: Uint8Array): string {
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i += 1) {
-      carry += (digits[i] ?? 0) << 8;
-      digits[i] = carry % 58;
-      carry = Math.floor(carry / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  let text = "";
-  for (const byte of bytes) {
-    if (byte !== 0) break;
-    text += "1";
-  }
-  return text + digits.reverse().map((digit) => BASE58[digit] ?? "").join("");
+function message(err: unknown, fallback: string): string {
+  return err instanceof RequestError ? err.message : fallback;
+}
+
+async function getAccount(query = ""): Promise<AccountBody> {
+  const response = await fetch(`/api/pro/account${query ? `?${query}` : ""}`, { cache: "no-store" });
+  const payload = (await response.json().catch(() => ({}))) as AccountBody & { error?: string };
+  if (!response.ok) throw new RequestError(payload.error ?? "Something went wrong on our side. Try again in a minute.");
+  return payload;
 }
 
 export function AccountPanel({
+  signedIn,
   initialHandle,
   initialWallet,
   priceUsd,
   periodDays,
+  botHandle,
 }: {
+  signedIn: string | null;
   initialHandle: string;
   initialWallet: string;
   priceUsd: number;
   periodDays: number;
+  botHandle: string;
 }) {
-  const [handle, setHandle] = useState(initialHandle);
-  const [wallet, setWallet] = useState(initialWallet);
-  const [mint, setMint] = useState("");
+  const router = useRouter();
   const [account, setAccount] = useState<AccountBody | null>(null);
-  const [proof, setProof] = useState<Proof | null>(null);
+  const [lookup, setLookup] = useState(initialWallet || (initialHandle ? `@${initialHandle.replace(/^@/, "")}` : ""));
+  const [found, setFound] = useState<AccountBody | null>(null);
+  const [mint, setMint] = useState("");
+  const [pending, setPending] = useState<"load" | "sign" | "lookup" | "add" | "remove" | "out" | null>(
+    signedIn ? "load" : null,
+  );
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [pending, setPending] = useState<"load" | "add" | "remove" | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
 
-  async function load(nextHandle = handle, nextWallet = wallet, nextProof: Proof | null = proof) {
+  const loadOwn = useCallback(async () => {
     setPending("load");
     setError(null);
-    setMessage(null);
     try {
-      const params = new URLSearchParams();
-      if (nextHandle.trim()) params.set("handle", nextHandle.trim());
-      if (nextWallet.trim()) params.set("wallet", nextWallet.trim());
-      if (nextProof) {
-        params.set("proofWallet", nextProof.wallet);
-        params.set("nonce", nextProof.nonce);
-        params.set("expiresAt", String(nextProof.expiresAt));
-        params.set("signature", nextProof.signature);
-      }
-      const response = await fetch(`/api/pro/account?${params.toString()}`);
-      const payload = (await response.json()) as AccountBody;
-      if (!response.ok) throw new Error(payload.error ?? "Could not load the account.");
-      setAccount(payload);
-      if (!payload.user && !payload.public) setMessage("No account for that handle or wallet yet.");
+      setAccount(await getAccount());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the account.");
+      setError(message(err, "Your account could not be loaded. Try again in a minute."));
     } finally {
       setPending(null);
     }
-  }
+  }, []);
 
-  async function onSign() {
-    setPending("load");
+  const runLookup = useCallback(async (value: string) => {
+    const text = value.trim();
+    if (!text) {
+      setError("Enter an X handle or a wallet address.");
+      return;
+    }
+    setPending("lookup");
     setError(null);
-    setMessage(null);
+    setFound(null);
     try {
-      const provider = (window as Window & {
-        solana?: {
-          publicKey?: { toString(): string };
-          signMessage?: (message: Uint8Array, display?: string) => Promise<Uint8Array | { signature: Uint8Array }>;
-        };
-      }).solana;
-      if (!provider?.signMessage) {
-        throw new Error("This browser has no Solana wallet that can sign a message.");
-      }
-      const address = wallet.trim() || provider.publicKey?.toString() || "";
-      if (!address) throw new Error("Enter the Pro wallet, or open the wallet extension.");
-      const issuedResponse = await fetch("/api/pro/nonce", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ wallet: address }),
-      });
-      const issued = (await issuedResponse.json()) as { error?: string; nonce?: string; expiresAt?: number; message?: string };
-      if (!issuedResponse.ok || !issued.nonce || !issued.expiresAt || !issued.message) {
-        throw new Error(issued.error ?? "Could not start the signature.");
-      }
-      const signed = await provider.signMessage(new TextEncoder().encode(issued.message), "utf8");
-      const bytes = signed instanceof Uint8Array ? signed : signed.signature;
-      const next: Proof = {
-        wallet: address,
-        nonce: issued.nonce,
-        expiresAt: issued.expiresAt,
-        signature: encodeBase58(bytes),
-      };
-      setProof(next);
-      setWallet(address);
-      await load(handle, address, next);
+      const params = new URLSearchParams();
+      if (text.startsWith("@") || text.length < 32) params.set("handle", text.replace(/^@/, ""));
+      else params.set("wallet", text);
+      setFound(await getAccount(params.toString()));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The wallet did not sign.");
+      setError(message(err, "That account could not be looked up. Try again."));
+    } finally {
+      setPending(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (signedIn) void loadOwn();
+    else if (initialWallet || initialHandle) void runLookup(initialWallet || initialHandle);
+  }, [signedIn, initialWallet, initialHandle, loadOwn, runLookup]);
+
+  async function onSignIn() {
+    setPending("sign");
+    setError(null);
+    try {
+      await signInWithWallet();
+      router.refresh();
+    } catch (err) {
+      setError(message(err, "The wallet did not sign. Try again."));
       setPending(null);
     }
   }
 
-  useEffect(() => {
-    if (initialHandle.trim() || initialWallet.trim()) {
-      void load(initialHandle, initialWallet);
+  async function onSignOut() {
+    setPending("out");
+    try {
+      await sendJson("/api/pro/session", undefined, "DELETE");
+    } catch {
+      // The cookie is httpOnly; a failed request leaves it, and the next refresh shows the truth.
     }
-    // Load once from the URL. Later lookups use the button.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function onLookup(event: React.FormEvent) {
-    event.preventDefault();
-    if (!handle.trim() && !wallet.trim()) {
-      setError("Enter an X handle or a wallet.");
-      return;
-    }
-    await load();
+    setAccount(null);
+    router.refresh();
   }
 
   async function onAdd(event: React.FormEvent) {
     event.preventDefault();
     setPending("add");
     setError(null);
-    setMessage(null);
+    setSaved(null);
     try {
-      const response = await fetch("/api/pro/watch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          xHandle: handle,
-          wallet: proof?.wallet || wallet,
-          mint,
-          nonce: proof?.nonce,
-          expiresAt: proof?.expiresAt,
-          signature: proof?.signature,
-        }),
-      });
-      const payload = (await response.json()) as { error?: string; watches?: Watch[] };
-      if (!response.ok) throw new Error(payload.error ?? "Could not save the watch.");
-      setAccount((current) => (current ? { ...current, watches: payload.watches ?? [] } : current));
+      const payload = await sendJson<{ watches: Watch[] }>("/api/pro/watch", { mint: mint.trim() });
+      setAccount((current) => (current ? { ...current, watches: payload.watches } : current));
       setMint("");
-      setMessage("Watch saved. A HIGH result on this mint sends a DM to the X account on this plan.");
+      setSaved("Saved. A HIGH result on this token sends you a DM on X.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save the watch.");
+      setError(message(err, "That token could not be saved. Try again."));
     } finally {
       setPending(null);
     }
@@ -189,184 +147,211 @@ export function AccountPanel({
   async function onRemove(target: string) {
     setPending("remove");
     setError(null);
+    setSaved(null);
     try {
-      const response = await fetch("/api/pro/watch", {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          xHandle: handle,
-          wallet: proof?.wallet || wallet,
-          mint: target,
-          nonce: proof?.nonce,
-          expiresAt: proof?.expiresAt,
-          signature: proof?.signature,
-        }),
-      });
-      const payload = (await response.json()) as { error?: string; watches?: Watch[] };
-      if (!response.ok) throw new Error(payload.error ?? "Could not remove the watch.");
-      setAccount((current) => (current ? { ...current, watches: payload.watches ?? [] } : current));
+      const payload = await sendJson<{ watches: Watch[] }>("/api/pro/watch", { mint: target }, "DELETE");
+      setAccount((current) => (current ? { ...current, watches: payload.watches } : current));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not remove the watch.");
+      setError(message(err, "That token could not be removed. Try again."));
     } finally {
       setPending(null);
     }
   }
 
   const user = account?.user ?? null;
-  const tier = user ? (account?.tier ?? "free") : null;
+  const pro = Boolean(user) && account?.tier === "pro";
+  const linked = Boolean(user?.xLinkedAt && user.xHandle);
   const watches = account?.watches ?? [];
-  const pro = tier === "pro";
+  const price = formatUsdc(priceUsd);
 
   return (
-    <div className="mt-8 space-y-6">
-      <form onSubmit={onLookup} className="space-y-4 rounded-2xl border border-line bg-panel p-5">
-        <div>
-          <label className="text-sm text-muted" htmlFor="account-handle">
-            X handle
-          </label>
-          <Input
-            id="account-handle"
-            className="mt-2"
-            value={handle}
-            onChange={(event) => setHandle(event.target.value)}
-            placeholder="@yourhandle"
-            autoComplete="off"
-          />
-        </div>
-        <div>
-          <label className="text-sm text-muted" htmlFor="account-wallet">
-            Wallet
-          </label>
-          <Input
-            id="account-wallet"
-            className="mt-2"
-            value={wallet}
-            onChange={(event) => setWallet(event.target.value)}
-            placeholder="Wallet that sent the USDC"
-            autoComplete="off"
-          />
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={pending !== null}>
-            {pending === "load" ? "Looking up…" : "Look up account"}
-          </Button>
-          <Button type="button" variant="outline" disabled={pending !== null} onClick={() => void onSign()}>
-            Sign with wallet
-          </Button>
-        </div>
-      </form>
+    <div className={COLUMNS}>
+      <div className="min-w-0 space-y-6">
+        {error ? <Notice tone="bad">{error}</Notice> : null}
 
-      {error ? <Notice tone="bad">{error}</Notice> : null}
-      {message ? <Notice tone="info">{message}</Notice> : null}
-
-      {account?.restricted && account.public ? (
-        <section className="rounded-2xl border border-line bg-panel p-5" aria-live="polite">
-          <h2 className="font-serif text-2xl tracking-tight">{account.public.pro ? "Pro" : "Free"}</h2>
-          <p className="mt-3 text-sm leading-6 text-muted">
-            {account.public.handle ? `@${account.public.handle} is ${account.public.pro ? "Pro" : "not Pro"}. ` : ""}
-            Wallet, expiry, and the watchlist stay hidden until that wallet signs a short message in this browser.
-          </p>
-        </section>
-      ) : null}
-
-      {user && tier ? (
-        <section className="rounded-2xl border border-line bg-panel p-5" aria-live="polite">
-          <h2 className="font-serif text-2xl tracking-tight">{pro ? "Pro" : "Free"}</h2>
-          <dl className="mt-4 space-y-3 text-sm">
-            <div>
-              <dt className="text-faint">X account</dt>
-              <dd>{user.xLinkedAt && user.xHandle ? `@${user.xHandle} (linked by DM)` : "Not linked"}</dd>
-            </div>
-            <div>
-              <dt className="text-faint">Wallet</dt>
-              <dd className="break-all font-mono text-xs">{user.wallet ?? "None on this record"}</dd>
-            </div>
-            <div>
-              <dt className="text-faint">Expiry</dt>
-              <dd>
-                {pro && user.proUntil
-                  ? `Active until ${formatTime(user.proUntil)}`
-                  : user.proUntil
-                    ? `Ended ${formatTime(user.proUntil)}. This account is on the free plan.`
-                    : "No paid period on this account."}
-              </dd>
-            </div>
-          </dl>
-          {!pro ? (
-            <p className="mt-4 text-sm leading-6 text-muted">
-              Pro is {formatUsdc(priceUsd)} USDC for {periodDays} days.{" "}
-              <Link href="/pro" className="text-accent-text hover:text-ink">
-                Pay with USDC
-              </Link>
-              .
-            </p>
-          ) : null}
-          {pro && user.xLinkedAt ? (
-            <p className="mt-3 text-sm leading-6 text-faint">
-              Linked to @{user.xHandle}. No daily cap for that X account, and DMs go to it when a watched mint is checked
-              as HIGH. Lens does not hold funds for the account.
-            </p>
-          ) : pro && account?.linkCode ? (
-            <div className="mt-4 rounded-xl border border-line bg-panel-2 p-4">
-              <p className="text-sm text-muted">Link your X account</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <p className="font-mono text-xl tracking-wide text-ink">{account.linkCode.code}</p>
-                <CopyButton value={account.linkCode.code} label="Copy code" />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-muted">
-                DM this code to @justasklens on X from the account that should get Pro. It works once and expires{" "}
-                {formatTime(account.linkCode.expiresAt)}. Only that X account gets the perks.
+        {!signedIn ? (
+          <>
+            <section className={CARD}>
+              <h2 className="font-serif text-2xl tracking-tight">Sign in</h2>
+              <p className="mt-2 text-base leading-7 text-muted">
+                Sign one message with your wallet. It costs nothing and stays signed in for 24 hours.
               </p>
-            </div>
-          ) : !pro ? (
-            <p className="mt-3 text-sm leading-6 text-faint">After paying, sign here again to get your X link code.</p>
-          ) : null}
-        </section>
-      ) : null}
-
-      {user ? (
-        <section className="rounded-2xl border border-line bg-panel p-5">
-          <h2 className="font-serif text-2xl tracking-tight">Watchlist</h2>
-          {pro ? (
-            <form onSubmit={onAdd} className="mt-4 space-y-3">
-              <label className="text-sm text-muted" htmlFor="watch-mint">
-                Mint to watch
-              </label>
-              <Input
-                id="watch-mint"
-                value={mint}
-                onChange={(event) => setMint(event.target.value)}
-                placeholder="Solana token mint"
-                autoComplete="off"
-              />
-              <Button type="submit" disabled={pending !== null}>
-                {pending === "add" ? "Saving…" : "Add to watchlist"}
+              <Button className="mt-4" type="button" disabled={pending !== null} onClick={() => void onSignIn()}>
+                {pending === "sign" ? "Waiting for the wallet…" : "Sign in with wallet"}
               </Button>
-            </form>
+            </section>
+
+            <section className={CARD}>
+              <h2 className="font-serif text-2xl tracking-tight">Look up an account</h2>
+              <form
+                className="mt-4 flex flex-col gap-3 sm:flex-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void runLookup(lookup);
+                }}
+              >
+                <label className="sr-only" htmlFor="lookup">
+                  X handle or wallet address
+                </label>
+                <Input
+                  id="lookup"
+                  value={lookup}
+                  onChange={(event) => setLookup(event.target.value)}
+                  placeholder="@handle or wallet address"
+                  autoComplete="off"
+                />
+                <Button type="submit" variant="outline" disabled={pending !== null}>
+                  {pending === "lookup" ? "Looking up…" : "Show plan status"}
+                </Button>
+              </form>
+              {found ? (
+                <p className="mt-4 text-base text-ink" aria-live="polite">
+                  {found.public
+                    ? found.public.pro
+                      ? "Pro is active on this account."
+                      : "This account is not on Pro."
+                    : "No account found."}
+                </p>
+              ) : null}
+            </section>
+          </>
+        ) : pending === "load" && !account ? (
+          <p className="status-wait text-base text-muted">Loading your plan…</p>
+        ) : !pro ? (
+          <section className={CARD}>
+            <h2 className="font-serif text-2xl tracking-tight">No active plan</h2>
+            <p className="mt-2 text-base leading-7 text-muted">
+              Pro is {price} USDC for {periodDays} days: no daily limit on X, and a DM when a token you watch turns HIGH.
+            </p>
+            <Button asChild className="mt-4">
+              <Link href="/pro">Get Pro for {price} USDC</Link>
+            </Button>
+          </section>
+        ) : (
+          <>
+            {!linked && account?.linkCode ? (
+              <section className={`${CARD} border-accent/50`} aria-live="polite">
+                <h2 className="font-serif text-2xl tracking-tight">Link your X account</h2>
+                <p className="mt-2 text-base leading-7 text-muted">
+                  Send this code as a DM to{" "}
+                  <a
+                    href={`https://x.com/${botHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-text hover:text-ink"
+                  >
+                    @{botHandle}
+                  </a>{" "}
+                  from the X account that should get Pro.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <p className="font-mono text-2xl tracking-wide text-ink">{account.linkCode.code}</p>
+                  <CopyButton value={account.linkCode.code} label="Copy code" />
+                </div>
+                <p className="mt-3 text-base text-faint">Works once. Expires {formatTime(account.linkCode.expiresAt)}.</p>
+              </section>
+            ) : null}
+
+            <section className={CARD}>
+              <h2 className="font-serif text-2xl tracking-tight">Watchlist</h2>
+              <p className="mt-2 text-base leading-7 text-muted">Get a DM on X when one of these tokens is rated HIGH.</p>
+              <form onSubmit={onAdd} className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <label className="sr-only" htmlFor="watch-mint">
+                  Token address
+                </label>
+                <Input
+                  id="watch-mint"
+                  value={mint}
+                  onChange={(event) => setMint(event.target.value)}
+                  placeholder="Token address (mint)"
+                  autoComplete="off"
+                />
+                <Button type="submit" disabled={pending !== null || !mint.trim()}>
+                  {pending === "add" ? "Saving…" : "Add to watchlist"}
+                </Button>
+              </form>
+              {saved ? (
+                <p className="mt-3 text-base text-low" role="status">
+                  {saved}
+                </p>
+              ) : null}
+              {watches.length === 0 ? (
+                <p className="mt-4 text-base text-faint">No tokens yet.</p>
+              ) : (
+                <ul className="mt-4 divide-y divide-line border-t border-line">
+                  {watches.map((watch) => (
+                    <li key={watch.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-ink">${watch.symbol}</p>
+                        <p className="truncate font-mono text-sm text-faint" title={watch.mint}>
+                          {shortMint(watch.mint)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending !== null}
+                        onClick={() => void onRemove(watch.mint)}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
+      </div>
+
+      <aside className="space-y-4">
+        <section className={CARD} aria-live="polite">
+          <p className="text-base text-faint">Plan</p>
+          <p className="mt-1 font-serif text-3xl tracking-tight text-ink">
+            {!signedIn ? "Not signed in" : pro ? "Pro" : "Free"}
+          </p>
+          <dl className="mt-4 space-y-3 text-base">
+            {signedIn ? (
+              <div>
+                <dt className="text-faint">Wallet</dt>
+                <dd className="font-mono text-sm text-ink" title={signedIn}>
+                  {shortMint(signedIn)}
+                </dd>
+              </div>
+            ) : null}
+            {pro && user?.proUntil ? (
+              <div>
+                <dt className="text-faint">Active until</dt>
+                <dd className="text-ink">{formatTime(user.proUntil)}</dd>
+              </div>
+            ) : null}
+            {signedIn && user ? (
+              <div>
+                <dt className="text-faint">X account</dt>
+                <dd className="text-ink">{linked ? `@${user.xHandle}` : "Not linked"}</dd>
+              </div>
+            ) : null}
+            {!signedIn ? (
+              <div>
+                <dt className="text-faint">Pro</dt>
+                <dd className="text-ink">
+                  {price} USDC for {periodDays} days
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+          {signedIn ? (
+            <Button className="mt-5" type="button" variant="outline" disabled={pending !== null} onClick={() => void onSignOut()}>
+              {pending === "out" ? "Signing out…" : "Sign out"}
+            </Button>
           ) : (
-            <p className="mt-3 text-sm leading-6 text-muted">Watchlist alerts are part of Pro.</p>
-          )}
-          {watches.length === 0 ? (
-            <p className="mt-4 text-sm text-faint">No mints on this watchlist.</p>
-          ) : (
-            <ul className="mt-4 divide-y divide-line border-t border-line">
-              {watches.map((watch) => (
-                <li key={watch.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="font-medium">${watch.symbol}</p>
-                    <p className="truncate font-mono text-xs text-faint" title={watch.mint}>
-                      {shortMint(watch.mint)}
-                    </p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" disabled={pending !== null} onClick={() => onRemove(watch.mint)}>
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <Button asChild className="mt-5" variant="outline">
+              <Link href="/pro">Get Pro</Link>
+            </Button>
           )}
         </section>
-      ) : null}
+      </aside>
     </div>
   );
 }

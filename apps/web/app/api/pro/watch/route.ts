@@ -1,67 +1,48 @@
 import { isActivePro, isSolanaAddress, safeSymbol, watchChangeAllowed } from "@lens/core";
-import { getRuntime } from "@/lib/runtime";
-import { readWalletProof, walletUnlocks } from "@/lib/wallet-session";
 import { route } from "@/lib/api";
+import { getRuntime } from "@/lib/runtime";
+import { sameOrigin, sessionWallet } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
-async function findAccount(handle: string, wallet: string) {
+/** Watchlist writes need the session cookie of the paying wallet. The body never chooses the account. */
+async function signedInAccount(request: Request) {
+  if (!sameOrigin(request.headers)) {
+    return { ok: false as const, response: Response.json({ error: "Open this page on the Lens site." }, { status: 403 }) };
+  }
+  const wallet = await sessionWallet();
   const rt = await getRuntime();
-  const user =
-    (wallet ? await rt.store.findUser({ wallet }) : null) ??
-    (handle ? await rt.store.findUser({ xHandle: handle }) : null);
-  return { rt, user };
+  const user = wallet ? await rt.store.findUser({ wallet }) : null;
+  const allowed = watchChangeAllowed({ unlocked: Boolean(user), activePro: isActivePro(user) });
+  if (!allowed.ok) return { ok: false as const, response: Response.json({ error: allowed.error }, { status: allowed.status }) };
+  return { ok: true as const, rt, user: user! };
 }
 
-function authorize(user: { wallet: string | null; proUntil: string | null } | null, body: Record<string, unknown> | null) {
-  const proof = readWalletProof(body);
-  const allowed = watchChangeAllowed({
-    unlocked: walletUnlocks(user, proof),
-    activePro: isActivePro(user),
-  });
-  return allowed;
+async function readMint(request: Request) {
+  const body = (await request.json().catch(() => null)) as { mint?: string; symbol?: string } | null;
+  return { mint: body?.mint?.trim() ?? "", symbol: body?.symbol?.trim() ?? "" };
 }
 
 async function handlePost(request: Request) {
-  const body = (await request.json().catch(() => null)) as {
-    xHandle?: string;
-    wallet?: string;
-    mint?: string;
-    symbol?: string;
-    nonce?: string;
-    expiresAt?: number;
-    signature?: string;
-  } | null;
-  const { rt, user } = await findAccount(body?.xHandle?.trim() ?? "", body?.wallet?.trim() ?? "");
-  if (!user) return Response.json({ error: "No account for that handle or wallet." }, { status: 404 });
-  const allowed = authorize(user, body);
-  if (!allowed.ok) return Response.json({ error: allowed.error }, { status: allowed.status });
-  const mint = body?.mint?.trim() ?? "";
+  const account = await signedInAccount(request);
+  if (!account.ok) return account.response;
+  const { mint, symbol } = await readMint(request);
   if (!isSolanaAddress(mint)) {
     return Response.json({ error: "That is not a Solana token address." }, { status: 400 });
   }
-  const symbol = safeSymbol(body?.symbol?.trim() || "TOKEN", mint);
-  const watch = await rt.store.addWatch(user.id, mint, symbol);
-  const watches = await rt.store.listWatches(user.id);
-  return Response.json({ watch, watches });
+  const watch = await account.rt.store.addWatch(account.user.id, mint, safeSymbol(symbol || "TOKEN", mint));
+  return Response.json({ watch, watches: await account.rt.store.listWatches(account.user.id) });
 }
 
 async function handleDelete(request: Request) {
-  const body = (await request.json().catch(() => null)) as {
-    xHandle?: string;
-    wallet?: string;
-    mint?: string;
-    nonce?: string;
-    expiresAt?: number;
-    signature?: string;
-  } | null;
-  const { rt, user } = await findAccount(body?.xHandle?.trim() ?? "", body?.wallet?.trim() ?? "");
-  if (!user) return Response.json({ error: "No account for that handle or wallet." }, { status: 404 });
-  const allowed = authorize(user, body);
-  if (!allowed.ok) return Response.json({ error: allowed.error }, { status: allowed.status });
-  const mint = body?.mint?.trim() ?? "";
-  await rt.store.removeWatch(user.id, mint);
-  return Response.json({ watches: await rt.store.listWatches(user.id) });
+  const account = await signedInAccount(request);
+  if (!account.ok) return account.response;
+  const { mint } = await readMint(request);
+  if (!isSolanaAddress(mint)) {
+    return Response.json({ error: "That is not a Solana token address." }, { status: 400 });
+  }
+  await account.rt.store.removeWatch(account.user.id, mint);
+  return Response.json({ watches: await account.rt.store.listWatches(account.user.id) });
 }
 
 export const POST = route("watch POST", handlePost);

@@ -1,5 +1,6 @@
-import { PageHeader } from "@/components/page-header";
+import { PageShell } from "@/components/page-shell";
 import { publicConfig } from "@/lib/public-config";
+import { sessionWallet } from "@/lib/wallet-session";
 import { AccountPanel } from "./account-panel";
 
 export const dynamic = "force-dynamic";
@@ -15,20 +16,18 @@ export default async function AccountPage({
 }) {
   const params = await searchParams;
   const config = await publicConfig();
+  const signedIn = await sessionWallet().catch(() => null);
 
   return (
-    <main className="max-w-2xl py-10 sm:py-14">
-      <PageHeader
-        kicker="Account"
-        title="Plan, expiry, and watchlist."
-        lede="Look up a plan with the X handle or the wallet that paid. There is no password. Lens does not hold a balance for you."
-      />
+    <PageShell title="Your account" lede="Sign in with the wallet that paid. No password.">
       <AccountPanel
+        signedIn={signedIn}
         initialHandle={params.handle ?? ""}
         initialWallet={params.wallet ?? ""}
         priceUsd={config.proPriceUsdc}
         periodDays={config.proPeriodDays}
+        botHandle={config.xBotHandle}
       />
-    </main>
+    </PageShell>
   );
 }

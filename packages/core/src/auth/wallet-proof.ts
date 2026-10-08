@@ -53,6 +53,8 @@ export interface IssuedNonce {
 export interface NonceStore {
   issue(wallet: string, now?: number): IssuedNonce;
   matches(nonce: string, wallet: string, expiresAt: number, now?: number): boolean;
+  /** Forgets the nonce so the same signature cannot be used again. */
+  consume(nonce: string): void;
 }
 
 export function createNonceStore(maxKeys = 5_000): NonceStore {
@@ -75,6 +77,9 @@ export function createNonceStore(maxKeys = 5_000): NonceStore {
       if (row.expiresAt <= now) return false;
       return true;
     },
+    consume(nonce) {
+      issued.delete(nonce);
+    },
   };
 }
 
@@ -83,7 +88,7 @@ export function watchChangeAllowed(input: {
   activePro: boolean;
 }): { ok: true } | { ok: false; status: 401 | 403; error: string } {
   if (!input.unlocked) {
-    return { ok: false, status: 401, error: "Sign a message with the Pro wallet to change the watchlist." };
+    return { ok: false, status: 401, error: "Sign in with the Pro wallet first." };
   }
   if (!input.activePro) {
     return { ok: false, status: 403, error: "Watchlist alerts are part of Pro." };
