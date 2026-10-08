@@ -15,6 +15,9 @@ const readyEnv = {
   POLL_INTERVAL_MS: "180000",
   MAX_X_REPLIES_PER_DAY: "50",
   SOLANA_KEYPAIR: "[1,2,3]",
+  DATA_MODE: "live",
+  PROOF_MODE: "solana",
+  LENS_SESSION_SECRET: "session-secret",
 };
 
 describe("doctor report", () => {
@@ -25,6 +28,7 @@ describe("doctor report", () => {
       jupiter: { ok: true, detail: "answered" },
       xToken: "skipped",
       keypairPresent: true,
+      signer: { pubkey: "Signer1111", lamports: 1_000_000_000n },
     });
     expect(report.ready).toBe(true);
     const text = formatDoctorReport(report);
@@ -90,5 +94,33 @@ describe("doctor probes", () => {
     const missing = await probeXUser(undefined, fetchImpl);
     expect(missing.ok).toBe(false);
     expect(calls).toBe(1);
+  });
+
+  it("names the fix for each missing or wrong setting", () => {
+    const config = loadConfig({
+      ...readyEnv,
+      DATA_MODE: "mock",
+      LENS_SESSION_SECRET: "",
+      PROOF_SIGNER: "OtherSigner",
+      PRO_TREASURY_WALLET: "6bzZwnSvBLur1xr9baRyHZ3Ck4GgiUCUZf8YQ3oXBEm5",
+    });
+    const report = buildDoctorReport(config, {
+      rpc: { ok: true, detail: "answered" },
+      jupiter: { ok: true, detail: "answered" },
+      xToken: "skipped",
+      keypairPresent: true,
+      signer: { pubkey: "Signer1111", lamports: 1_000n },
+      proNetwork: "devnet",
+      usdcMintFound: false,
+    });
+    expect(report.ready).toBe(false);
+    const text = formatDoctorReport(report);
+    expect(text).toContain("Set DATA_MODE=live");
+    expect(text).toContain("LENS_SESSION_SECRET is not set");
+    expect(text).toContain("Send it at least 0.01 SOL");
+    expect(text).toContain("PROOF_SIGNER (OtherSigner) is not the proof keypair");
+    expect(text).toContain("Pro payments run on devnet");
+    expect(text).toContain("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
+    expect(text).toContain("note");
   });
 });
