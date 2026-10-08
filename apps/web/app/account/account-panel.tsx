@@ -124,6 +124,7 @@ export function AccountPanel({
       // The cookie is httpOnly; a failed request leaves it, and the next refresh shows the truth.
     }
     setAccount(null);
+    setPending(null);
     router.refresh();
   }
 

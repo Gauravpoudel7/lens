@@ -10,11 +10,16 @@ async function handlePost(request: Request) {
   if (!reference) return Response.json({ error: "Paste the payment reference." }, { status: 400 });
   const deps = await billingDeps();
   const result = await confirmUsdcCheckout(deps, reference);
-  if (!result.ok) return Response.json({ error: result.error, reason: result.reason }, { status: 402 });
+  if (!result.ok) {
+    // Not paid yet is a normal answer while polling, not a failed request.
+    const status = result.reason === "pending" ? 202 : 402;
+    return Response.json({ error: result.error, reason: result.reason }, { status });
+  }
+  // The reference is public on-chain, so the reply carries only what the payer already knows: the wallet.
   return Response.json({
     signature: result.signature,
     already: result.already,
-    user: result.user,
+    user: { wallet: result.user.wallet },
     ...proStatus(result.user),
   });
 }

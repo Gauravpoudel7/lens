@@ -112,7 +112,11 @@ export function ProPanel({
     const deadline = Date.now() + (patient ? CONFIRM_TIMEOUT_MS : 0);
     for (;;) {
       try {
-        return await sendJson<Confirmed>("/api/pro/confirm", { reference: ref });
+        const answer = await sendJson<Confirmed & { reason?: string; error?: string }>("/api/pro/confirm", {
+          reference: ref,
+        });
+        if (answer.reason !== "pending") return answer;
+        throw new RequestError(answer.error ?? "No transfer yet.", "pending");
       } catch (err) {
         const next = toNotice(err, "The payment could not be checked. Try again.");
         if (next.reason !== "pending" || Date.now() >= deadline) {
