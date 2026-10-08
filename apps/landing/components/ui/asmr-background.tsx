@@ -19,6 +19,7 @@ type Particle = {
   size: number;
   alpha: number;
   color: string;
+  solid: string;
   rotation: number;
   rotationSpeed: number;
   glow: number;
@@ -26,6 +27,7 @@ type Particle = {
 
 function makeParticle(width: number, height: number): Particle {
   const glass = Math.random() > 0.7; // 70% charcoal, 30% glass
+  const color = glass ? "240, 245, 255" : "80, 80, 85";
   return {
     x: Math.random() * width,
     y: Math.random() * height,
@@ -33,7 +35,8 @@ function makeParticle(width: number, height: number): Particle {
     vy: (Math.random() - 0.5) * 0.06,
     size: Math.random() * 1.5 + 0.5,
     alpha: Math.random() * 0.4 + 0.1,
-    color: glass ? "240, 245, 255" : "80, 80, 85",
+    color,
+    solid: `rgb(${color})`,
     rotation: Math.random() * Math.PI * 2,
     rotationSpeed: (Math.random() - 0.5) * 0.015,
     glow: 0,
@@ -90,14 +93,23 @@ export function AsmrBackground({ className }: { className?: string }) {
       if (p.y > height + 20) p.y = -20;
     }
 
+    // Same pixels as save/translate/rotate/restore with an rgba() string per particle, minus the per-frame
+    // allocations: one transform call, the fixed colour plus globalAlpha. Glowing particles keep the rgba path
+    // because globalAlpha would also scale their shadow.
     function draw(p: Particle) {
-      ctx!.save();
-      ctx!.translate(p.x, p.y);
-      ctx!.rotate(p.rotation);
-      ctx!.fillStyle = `rgba(${p.color}, ${Math.min(p.alpha + p.glow, 0.9)})`;
+      const cos = Math.cos(p.rotation);
+      const sin = Math.sin(p.rotation);
+      ctx!.setTransform(cos, sin, -sin, cos, p.x, p.y);
+      const alpha = Math.min(p.alpha + p.glow, 0.9);
       if (p.glow > 0.3) {
+        ctx!.globalAlpha = 1;
+        ctx!.fillStyle = `rgba(${p.color}, ${alpha})`;
         ctx!.shadowBlur = 8 * p.glow;
         ctx!.shadowColor = `rgba(180, 220, 255, ${p.glow})`;
+      } else {
+        ctx!.globalAlpha = alpha;
+        ctx!.fillStyle = p.solid;
+        ctx!.shadowBlur = 0;
       }
       ctx!.beginPath();
       ctx!.moveTo(0, -p.size * 2.5);
@@ -106,13 +118,19 @@ export function AsmrBackground({ className }: { className?: string }) {
       ctx!.lineTo(-p.size, 0);
       ctx!.closePath();
       ctx!.fill();
-      ctx!.restore();
+    }
+
+    function resetState() {
+      ctx!.setTransform(1, 0, 0, 1, 0, 0);
+      ctx!.globalAlpha = 1;
+      ctx!.shadowBlur = 0;
     }
 
     function still() {
       ctx!.fillStyle = "#050506";
       ctx!.fillRect(0, 0, width, height);
       particles.forEach(draw);
+      resetState();
     }
 
     function render() {
@@ -123,6 +141,7 @@ export function AsmrBackground({ className }: { className?: string }) {
         update(p);
         draw(p);
       }
+      resetState();
       frame = requestAnimationFrame(render);
     }
 

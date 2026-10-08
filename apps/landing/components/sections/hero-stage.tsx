@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Application } from "@splinetool/runtime";
 import { m } from "framer-motion";
 import { SplineScene } from "@/components/ui/splite";
@@ -48,12 +48,20 @@ export function HeroStage() {
   const [use3D, setUse3D] = useState<boolean | null>(null);
   const [ready, setReady] = useState(false);
 
+  // Spline renders every frame even when nobody can see it; pause it while the hero is scrolled away.
+  const stage = useRef<HTMLDivElement>(null);
+  const app = useRef<Application | null>(null);
+  const onScreen = useRef(true);
+
   // Re-check on breakpoint or motion-setting changes, e.g. browser zoom crossing 768px.
   useEffect(() => {
     const update = () => {
       const ok = canRun3D();
       setUse3D(ok);
-      if (!ok) setReady(false); // a remount fades in again after its own load
+      if (!ok) {
+        setReady(false); // a remount fades in again after its own load
+        app.current = null; // the unmounted scene is disposed
+      }
     };
     update();
     const queries = [matchMedia(REDUCE), matchMedia(NARROW)];
@@ -61,9 +69,20 @@ export function HeroStage() {
     return () => queries.forEach((q) => q.removeEventListener("change", update));
   }, []);
 
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => {
+      onScreen.current = entry.isIntersecting;
+      if (entry.isIntersecting) app.current?.play();
+      else app.current?.stop();
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   return (
-    <div role="img" aria-label="Lens, shown as a 3D analyst that follows your cursor" className="relative h-[320px] w-full md:h-full">
+    <div ref={stage} role="img" aria-label="Lens, shown as a 3D analyst that follows your cursor" className="relative h-[320px] w-full md:h-full">
       {use3D === false && <Poster />}
       {use3D && (
         // The scene scales with canvas height, so height follows width here; otherwise the hands crop.
@@ -79,11 +98,13 @@ export function HeroStage() {
           <SplineScene
             scene={SPLINE_SCENE}
             className="h-full w-full"
-            onLoad={(app) => {
+            onLoad={(spline) => {
               // Follow the cursor anywhere on the page, not only over the canvas (the text column sits on top of it).
-              app.setGlobalEvents(true);
-              startMidShot(app);
+              spline.setGlobalEvents(true);
+              startMidShot(spline);
               setReady(true);
+              app.current = spline;
+              if (!onScreen.current) spline.stop();
             }}
           />
         </m.div>
