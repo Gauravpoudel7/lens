@@ -1,4 +1,16 @@
-import { X_HANDLE } from "@/lib/site";
+import {
+  AGE_CAUTION_HOURS,
+  AGE_DANGER_HOURS,
+  CREATOR_SOLD_CAUTION_PCT,
+  CREATOR_SOLD_DANGER_PCT,
+  LIQUIDITY_SMALL_USD,
+  SNIPER_CAUTION_PCT,
+  SNIPER_DANGER_PCT,
+  TOP10_CAUTION_PCT,
+  TOP10_DANGER_PCT,
+  TRANSFER_FEE_DANGER_BPS,
+} from "@lens/core/thresholds";
+import { FREE_CHECKS_PER_DAY, PRO_PERIOD_DAYS, PRO_PRICE_USDC, SWAP_FEE_BPS, X_HANDLE } from "@/lib/site";
 
 export const HANDLE = `@${X_HANDLE}`;
 
@@ -9,7 +21,7 @@ export const NAV_LINKS = [
   { href: "#pricing", label: "Pricing" },
 ];
 
-// Spline scene from the component spec. TODO: swap for a Lens-branded scene.
+// Spline scene from the component spec. A Lens-branded scene can replace it.
 export const SPLINE_SCENE = "https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode";
 
 export const HERO = {
@@ -67,16 +79,41 @@ export const FEATURES = {
 
 export const STEPS = ["Someone posts a coin", `You tag ${HANDLE}`, "Lens checks the chain", "Proof, then reply"];
 
+// Built from packages/core/src/risk/thresholds.ts so the page cannot drift from the rules.
 export const CHECKS = [
-  { check: "Coin age", danger: "Under 24 hours (under 7 days is caution)", good: "Months or years old" },
-  { check: "Liquidity", danger: "Under $10k, or can be pulled", good: "Large and locked" },
-  { check: "Top holders", danger: "Top 10 wallets hold 70%+ (50%+ is caution)", good: "Spread across many holders" },
-  { check: "Creator wallet", danger: "Creator sold 40%+ (10%+ is caution)", good: "Not selling" },
+  {
+    check: "Coin age",
+    danger: `Under ${AGE_DANGER_HOURS} hours (under ${AGE_CAUTION_HOURS / 24} days is caution)`,
+    good: "Months or years old",
+  },
+  { check: "Liquidity", danger: `Under $${LIQUIDITY_SMALL_USD / 1000}k, or can be pulled`, good: "Large and locked" },
+  {
+    check: "Top holders",
+    danger: `Top 10 wallets hold ${TOP10_DANGER_PCT}%+ (${TOP10_CAUTION_PCT}%+ is caution)`,
+    good: "Spread across many holders",
+  },
+  {
+    check: "Creator wallet",
+    danger: `Creator sold ${CREATOR_SOLD_DANGER_PCT}%+ (${CREATOR_SOLD_CAUTION_PCT}%+ is caution)`,
+    good: "Not selling",
+  },
   { check: "Mint authority", danger: "Still on, creator can print more", good: "Turned off" },
   { check: "Freeze authority", danger: "Still on, creator can freeze your coins", good: "Turned off" },
-  { check: "Linked launch wallets", danger: "Linked wallets hold 30%+ (15%+ is caution)", good: "Normal buying" },
+  {
+    check: "Linked launch wallets",
+    danger: `Linked wallets hold ${SNIPER_DANGER_PCT}%+ (${SNIPER_CAUTION_PCT}%+ is caution)`,
+    good: "Normal buying",
+  },
   { check: "Claims in the post", danger: "“Burned” or “locked” not backed by the chain", good: "Matches the chain" },
+  {
+    check: "Token-2022 traps",
+    danger: `Transfer fee ${TRANSFER_FEE_DANGER_BPS / 100}%+, transfer hook, permanent delegate, or frozen by default`,
+    good: "None present",
+  },
 ];
+
+/** "9 checks" everywhere on the page comes from the table above. */
+export const CHECK_COUNT = CHECKS.length;
 
 export const SCORING = [
   { level: "HIGH" as const, rule: "Two or more danger signs." },
@@ -100,14 +137,12 @@ export const PROOF = {
 };
 
 export const REAL_STATS = [
-  { label: "On-chain checks", value: 8, suffix: "" },
+  { label: "On-chain checks", value: CHECK_COUNT, suffix: "" },
   { label: "Risk levels", value: 3, suffix: "" },
   { label: "Edits possible after posting", value: 0, suffix: "" },
-  { label: "Free checks a day", value: 5, suffix: "" },
+  { label: "Free checks a day", value: FREE_CHECKS_PER_DAY, suffix: "" },
 ];
 
-// configurable: PRO_PRICE_USDC in packages/core/src/config.ts (default 10)
-export const PRO_PRICE_USDC = 10;
 
 export const PRICING = {
   title: "Free to ask. Pro if you watch closely.",
@@ -116,22 +151,22 @@ export const PRICING = {
       name: "Free",
       price: "$0",
       cadence: "",
-      blurb: "5 checks a day",
+      blurb: `${FREE_CHECKS_PER_DAY} checks a day`,
       items: ["Public replies", "Full public record"],
       cta: { label: `Tag ${HANDLE}`, kind: "x" as const },
     },
     {
       name: "Pro",
       price: `${PRO_PRICE_USDC} USDC`,
-      cadence: "/ month",
+      cadence: `/ ${PRO_PERIOD_DAYS} days`,
       blurb: "For watchlists",
-      items: ["Unlimited checks", "Private watchlist", "DM alerts when a token turns HIGH"],
+      items: ["No personal daily cap", "Private watchlist", "DM alerts when a token turns HIGH"],
       cta: { label: "Pay with USDC", kind: "pro" as const },
       note: "Pro never changes a risk level.",
     },
     {
       name: "Trades via Blink",
-      price: "~0.5%",
+      price: `~${SWAP_FEE_BPS / 100}%`,
       cadence: "fee",
       blurb: "On Blink trades",
       items: ["Risk shown first", "Your own wallet, via Jupiter", "No buy button on HIGH"],

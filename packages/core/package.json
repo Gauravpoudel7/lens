@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./defaults": "./src/defaults.ts",
+    "./thresholds": "./src/risk/thresholds.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.98.4",

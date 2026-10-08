@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { MotionProvider } from "@/components/motion/provider";
 import { AsmrBackground } from "@/components/ui/asmr-background";
+import { CHECK_COUNT } from "@/content/copy";
 import { SITE_URL, X_HANDLE } from "@/lib/site";
 import { SPLINE_SCENE } from "@/content/copy";
 import { SPLINE_PRELOAD_MEDIA } from "@/lib/landing-budget";
@@ -11,7 +12,7 @@ const sans = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swa
 const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
 const TITLE = "Lens: The AI crypto analyst on X that can't lie about its record";
-const DESCRIPTION = `Tag @${X_HANDLE} under any Solana token post. Lens runs 8 on-chain checks, replies LOW, MEDIUM, or HIGH in plain English, and proves every answer on Solana before it posts.`;
+const DESCRIPTION = `Tag @${X_HANDLE} under any Solana token post. Lens runs ${CHECK_COUNT} on-chain checks, replies LOW, MEDIUM, or HIGH in plain English, and proves every answer on Solana before it posts.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

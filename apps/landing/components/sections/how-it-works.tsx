@@ -3,7 +3,7 @@ import { Reveal } from "@/components/motion/reveal";
 import { Section } from "@/components/sections/section";
 import { Steps } from "@/components/sections/steps";
 import { RiskPill } from "@/components/ui/badge";
-import { CHECKS, SCORING } from "@/content/copy";
+import { CHECKS, CHECK_COUNT, SCORING } from "@/content/copy";
 
 export function HowItWorks() {
   return (
@@ -12,7 +12,7 @@ export function HowItWorks() {
 
       <Reveal className="mt-20 md:mt-28">
         <div className="text-scrim w-fit">
-        <h3 className="text-2xl font-semibold tracking-tight text-ink">The 8 on-chain checks</h3>
+        <h3 className="text-2xl font-semibold tracking-tight text-ink">The {CHECK_COUNT} on-chain checks</h3>
         </div>
         <div className="glass mt-8 overflow-hidden rounded-2xl">
           <table className="w-full text-left text-base">

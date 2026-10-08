@@ -1,6 +1,6 @@
 import { Logo } from "@/components/logo";
 import { DISCLAIMER, HANDLE } from "@/content/copy";
-import { X_URL, appUrl } from "@/lib/site";
+import { GITHUB_URL, X_URL, appUrl } from "@/lib/site";
 
 const COLUMNS = [
   {
@@ -16,14 +16,14 @@ const COLUMNS = [
     title: "Resources",
     links: [
       { label: "How it works", href: "#how-it-works" },
-      { label: "Docs", href: "#" }, // TODO: docs URL
+      { label: "Pricing", href: "#pricing" },
     ],
   },
   {
     title: "Social",
     links: [
       { label: `X ${HANDLE}`, href: X_URL },
-      { label: "GitHub", href: "#" }, // TODO: public repo URL
+      ...(GITHUB_URL ? [{ label: "GitHub", href: GITHUB_URL }] : []),
     ],
   },
 ];

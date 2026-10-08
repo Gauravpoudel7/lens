@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { PROOF_CLUSTER } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 // "Proof" chip that opens on hover, focus, or click to show the memo and signature.
@@ -21,7 +22,7 @@ export function ProofChip({ memo, signature, className }: { memo: string; signat
         className="inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full border border-sol-mint/25 bg-sol-mint/[0.07] px-2.5 font-medium text-[#7cf7c4]"
       >
         <ShieldCheck className="size-3.5" aria-hidden />
-        Proof written · devnet
+        Proof written · {PROOF_CLUSTER}
       </button>
       <div
         className={cn(
