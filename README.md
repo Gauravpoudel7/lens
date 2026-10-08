@@ -233,9 +233,10 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `X_REPLY_LINKS` | `false` | `true` puts `Report: <url>` back in replies, outbound posts, and warning DMs. Off by default because X bills a URL much higher |
 | `X_SWAP_LINKS_ON_REQUEST` | `true` | A mention that says buy, swap, or trade gets one Blink URL when the verdict is LOW or MEDIUM and `PUBLIC_BASE_URL` is public https. HIGH and unscored tickers stay link-free. Set `false` to turn that off. These replies still count toward the daily caps |
 | `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
+| `PROOF_SIGNER` | empty | Pubkey that must have signed a chain memo. Empty uses the proof keypair above |
 | `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day. Pro accounts skip this |
 | `MAX_X_REPLIES_PER_DAY` | `50` | Bot-wide replies per UTC day. The worker stops replying when it is reached. Pro does not skip it |
-| `CHECK_API_LIMIT_PER_HOUR` | `30` | Manual check form, per IP, per process |
+| `CHECK_API_LIMIT_PER_HOUR` | `30` | Manual check, verify, and Blink, per `X-Real-IP`, per process |
 | `OUTCOME_WINDOW_DAYS` | `7` | How long before a check is scored |
 | `SHARP_DROP_PCT` | `-30` | HIGH is right if price change is at or below this |
 | `CALL_WIN_PCT` | `20` | A call wins at or above this |
@@ -273,14 +274,14 @@ Token reads stay on mainnet even when proofs go to devnet.
 The level is computed in `packages/core/src/risk/engine.ts`. Danger is worth 3, caution is worth 1.
 
 - **HIGH** if there are 2 or more danger signs, or the score is at least 6.
-- **MEDIUM** if there is 1 danger, or 2 cautions, or at least 4 checks came back unknown (a LOW with missing data is not treated as a clean pass).
-- **LOW** otherwise.
+- **MEDIUM** if there is 1 danger, or 2 cautions, or at least 4 checks came back unknown, or mint authority or freeze authority could not be read (a LOW with missing data is not treated as a clean pass).
+- **LOW** otherwise. A permanent delegate or a transfer fee of 5% or more cannot be LOW.
 
-Thresholds: age under 24 hours is danger, under 7 days is caution. Liquidity under $10k is danger (caution if it is locked). $10k–$50k is caution. $50k+ and unlocked is caution. Top 10 holders at 70%+ is danger, 50%+ is caution. Creator sold 40%+ is danger, 10%+ is caution. Mint or freeze authority still on is danger. Linked launch wallets at 30%+ is danger, 15%+ is caution. A “burned” or “locked” claim that the chain does not support is danger.
+Thresholds: age under 24 hours is danger, under 7 days is caution. Liquidity under $10k is danger (caution if it is locked). $10k–$50k is caution. $50k+ and unlocked is caution. Top 10 holders at 70%+ is danger, 50%+ is caution. That top 10 skips burn addresses, Raydium’s AMM authority, and any holder whose owning program is Raydium, Orca Whirlpool, Meteora, or pump.fun. Other holders stay in the count. Creator sold 40%+ is danger, 10%+ is caution. Mint or freeze authority still on is danger. Token-2022: a permanent delegate or accounts that start frozen is danger. A transfer fee of 5% or more is danger. A smaller fee, a transfer hook, or a non-transferable flag is caution. Linked launch wallets at 30%+ is danger, 15%+ is caution. A “locked” claim that the chain contradicts is danger. A “burned” claim is danger only when the chain shows a burn that is real but under 10%. A missing burn sample, or a zero burn, is “could not be verified,” not danger.
 
 Known stake-pool receipt mints (JitoSOL, mSOL, bSOL, jupSOL, INF) are matched by mint address. An enabled mint authority on those mints, or a mint authority that is a stake-pool program, is noted as “stake-pool token” and is not a danger sign. A different mint that only copies the ticker is still scored normally.
 
-Unknown creator sells do not count as danger. The report page still says the sells could not be verified. X replies leave that line out.
+Unknown creator sells do not count as danger. That figure is filled only when Birdeye returns it, and there is no key by default, so it is usually unknown. The report page still says the sells could not be verified. X replies leave that line out. The site does not claim a fixed set of eight checks.
 
 ### Tickers
 
@@ -303,8 +304,8 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 - `POST /api/check` `{ "input": "<mint, ticker, or post text>", "wallet"?: "<pro wallet>" }`
 - `POST /api/pro/checkout` `{ "xHandle"?, "wallet"? }` returns a Solana Pay URL
 - `POST /api/pro/confirm` `{ "reference" }` checks the USDC transfer and flips Pro
-- `GET /api/pro/account?handle=&wallet=`
-- `POST /api/pro/watch` `{ "xHandle"?, "wallet"?, "mint" }` and `DELETE` with the same fields
+- `GET /api/pro/account?handle=&wallet=` returns only whether that handle is Pro, unless the query also has a wallet signature (`proofWallet`, `nonce`, `expiresAt`, `signature`) from `POST /api/pro/nonce`
+- `POST /api/pro/watch` and `DELETE` need that same signature, and the account has to be Pro for both
 - `GET /api/calls`
 - `GET /api/calls/:id`
 - `GET /api/stats`
@@ -324,7 +325,13 @@ Free X accounts get `RATE_LIMIT_PER_USER_PER_DAY` replies (default 5). An accoun
 
 The Pro page reads `PRO_PRICE_USDC` (default 10 when unset), `PRO_PERIOD_DAYS` (default 30), and `RATE_LIMIT_PER_USER_PER_DAY`. An unpaid checkout older than `PRO_CHECKOUT_TTL_HOURS` (default 24) is reported as expired. A transfer that includes the reference but sends less than the price is reported as the wrong amount. A reference Lens never issued is reported as not found. A full transfer still confirms after the window. `/account` looks up the plan by X handle or wallet. There is no password. Lens does not hold the USDC.
 
-The public check form stays on an hourly IP limit. Sending the paying wallet with the form skips that limit. The wallet address is not a login. Anyone who knows a paying wallet can use it on the form. The X cap uses the author of the mention.
+The public check form, `/api/verify`, and the Blink trade route share an hourly limit of `CHECK_API_LIMIT_PER_HOUR` (default 30), counted separately. The key is Railway’s `X-Real-IP` header, which the public edge overwrites, so a caller cannot pick their own address. `X-Forwarded-For` is ignored. With no `X-Real-IP` (local `npm run dev`) everyone shares one bucket. The counters live in memory, capped at 5,000 keys, and reset with the process. A wallet on the form does not skip the limit. The X cap uses the author of the mention. Checkout will not attach a new wallet or handle to an account that already exists. One transaction signature can pay only one checkout. Renewing early adds the period onto the current end date.
+
+`/account` shows whether a handle is Pro to anyone. Wallet, X id, expiry, and the watchlist need a signed message from that wallet (`Lens account proof`, nonce, expiry). The same signature is required to add or remove a watch. Warning DMs are limited to one per watcher per mint per UTC day, 10 per watcher per day, and 100 for the bot per day.
+
+The home record and `/api/stats` count replies and outbound posts (`reply`, `call`, `warning`, `note`). Blink loads and the web form stay on their own report URLs so they cannot push those rows out of the last 500.
+
+Chain memos verify only when a signer is the proof wallet (`PROOF_SIGNER`, or the pubkey of `SOLANA_KEYPAIR` / `SOLANA_KEYPAIR_PATH`). Mock memos still verify in demo mode. If neither signer is set, a real memo does not verify.
 
 ## Scoring
 

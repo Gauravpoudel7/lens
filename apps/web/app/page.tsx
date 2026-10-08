@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { computeStats, type CheckRecord, type ScorecardStats } from "@lens/core";
+import { SCORECARD_KINDS, computeStats, type CheckRecord, type ScorecardStats } from "@lens/core";
 import { CountUp } from "@/components/count-up";
 import { RiskStamp } from "@/components/risk-stamp";
 import { SearchBox } from "@/components/search-box";
@@ -36,7 +36,7 @@ export default async function HomePage() {
   try {
     const rt = await getRuntime();
     windowDays = rt.config.outcomeWindowDays;
-    checks = await rt.store.listChecks({ limit: 200 });
+    checks = await rt.store.listChecks({ limit: 200, kinds: SCORECARD_KINDS });
     stats = computeStats(checks, {
       windowDays: rt.config.outcomeWindowDays,
       sharpDropPct: rt.config.sharpDropPct,

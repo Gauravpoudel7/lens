@@ -25,7 +25,7 @@ X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=t
 | Sections, copy, motion | Done | Page-wide particle canvas (cursor vortex, still frame under reduced motion). Text without a card sits on a feathered dark plate (`.text-scrim`) so particles fade behind the words. Hero: Spline 3D sized from the column width, with a transparent margin on the left so the hands are not cropped when the robot turns, Lens mark beside it, poster fallback; the scene file is preloaded with the page, the camera starts at a mid shot so Spline’s own pull-back intro plays without cropping the arms, the robot sits vertically centered with its head level with the headline, and its head follows the cursor anywhere on the page. Background particles swirl only while the cursor moves. The 3D scene pauses rendering while the hero is scrolled out of view, and the particle loop draws without per-frame allocations (same pixels). Then sources marquee, problem, features, how it works with the 8-check table, feed, verify demo, stats, sample posts, pricing, CTA, footer. No FAQ. Copy is kept short. Reduced motion shows static content and no 3D. |
 | Verify demo | Done | Client-side SHA-256 with `crypto.subtle`. Same `lens:v1` shape as `proof/hash.ts`, not imported from it. |
 | Feed examples | Illustrative | `$SAFE`, `$MID`, `$DANGER` fixtures, labeled on the page. Signatures are fake (`Ex1a…mpLe1`). |
-| Testimonials | Placeholder | Three sample posts in `apps/landing/content/placeholders.ts`, tagged on the page. The made-up usage numbers were removed; only real facts (8 checks, 3 levels, 0 edits, 5 free checks) are shown. |
+| Testimonials | Placeholder | Three sample posts in `apps/landing/content/placeholders.ts`, tagged on the page. The made-up usage numbers were removed. The page still says “8 checks.” Creator-sold percent is unknown unless `BIRDEYE_API_KEY` is set, so the product copy does not treat that figure as always available. Landing copy was left unchanged. |
 | Spline scene | Placeholder | The spec's demo robot scene. Swap for a Lens scene in `content/copy.ts`. |
 | Domain, docs, GitHub links | Not set | `NEXT_PUBLIC_SITE_URL`, footer `// TODO` links. |
 
@@ -131,13 +131,19 @@ The scorecard banner stays up while data or proof mode is mock.
 ## Known limits
 
 - Token age is the earliest pool time DexScreener returned, or RugCheck `detectedAt`, whichever is older. It is not the mint’s first slot.
-- Creator sold percent is only filled when Birdeye returns it. Unknown sells are not danger.
+- Creator sold percent is only filled when Birdeye returns it. Unknown sells are not danger. The landing page still says “8 checks”; that line was not edited. README and the scorecard do not claim eight checks are always present.
 - Sniper percent is RugCheck’s insider-network holding, or a Birdeye field when present.
 - LP lock is a heuristic. Concentrated-liquidity pools stay unknown.
 - Public mainnet RPC rate-limits `getTokenLargestAccounts`. Retries are on. The scored run above used Helius, and holder percent came back on the snapshot.
 - `data/devnet-keypair.json` still has 0 SOL. The memos above used a different signer supplied in `.env`. `npm run demo:devnet` uses that file unless `SOLANA_KEYPAIR` is set.
-- The manual-check IP limit is in memory, per process. A Pro wallet on the form skips it. That wallet is not a login.
-- Two workers can double-post. Run one worker.
+- The manual-check, verify, and Blink limits are in memory, per process, keyed by Railway `X-Real-IP` (the edge overwrites it). A wallet on the form does not skip them. The map keeps at most 5,000 keys.
+- A chain memo verifies only if the Lens proof wallet signed it (`PROOF_SIGNER`, or the configured proof keypair). Mock memos still verify.
+- Checkout does not rebind an existing handle or wallet. One signature pays one checkout. Early renewal extends from the current end date.
+- `/account` without a signed wallet message returns only whether the handle is Pro. Watch add and remove both need that signature and an active Pro plan.
+- The home record counts replies and outbound posts. Blink and web-form checks stay on their report URLs.
+- Token-2022 permanent delegate, a transfer fee of 5% or more, and accounts that start frozen are danger. A transfer hook, a smaller fee, or non-transferable is caution. An account that is not owned by the SPL Token or Token-2022 program is not scored as a mint. Top 10 holders skip known AMM and pump.fun accounts. Unread mint or freeze authority is at least MEDIUM. A burn claim with no on-chain burn is “could not be verified.”
+- The worker runs one poll at a time and will not reply again when a posted reply id is already stored. `LENS_ROLE=all` exits the container if that worker process dies.
+- Two workers can still double-post. Run one worker.
 - Sharpe is mean divided by sample standard deviation of call returns. It is not annualized.
 - Replies aim for 280 characters. The policy cap is 500. Default X copy has no URL. Set `X_REPLY_LINKS=true` to include the report link again. With links off, “Full report on …” is added only when `PUBLIC_SITE_NAME` is set or `PUBLIC_BASE_URL` is a public host. A dotted name can still be read as a link by X, so prefer a name without a domain until you want that.
 - `X_SWAP_LINKS_ON_REQUEST` defaults to true. Set it to `false` to keep trade mentions link-free. When it is on, `@justasklens buy $BONK`, `swap <mint>`, or `trade $JUP` adds exactly one `Swap:` line pointing at `https://<PUBLIC_BASE_URL>/api/actions/trade/<mint>` for LOW and MEDIUM. HIGH has no buy link. Copycats and other unscored tickers ask for the contract and get no link. Questions such as “should I buy?” and “safe to buy?” do not count. The link is omitted, and the reason is logged, when `PUBLIC_BASE_URL` is missing, http, localhost, `127.0.0.1`, another raw IP, or `*.local`. The reply still counts toward `RATE_LIMIT_PER_USER_PER_DAY` and `MAX_X_REPLIES_PER_DAY`.

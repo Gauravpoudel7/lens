@@ -74,6 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     jupiterBaseUrl: (env.JUPITER_BASE_URL ?? "https://api.jup.ag").replace(/\/$/, ""),
     solanaKeypair: clean(env.SOLANA_KEYPAIR),
     solanaKeypairPath: clean(env.SOLANA_KEYPAIR_PATH),
+    proofSigner: clean(env.PROOF_SIGNER),
     outboundEnabled: env.OUTBOUND_ENABLED === "true",
     outboundMints: (env.OUTBOUND_MINTS ?? "")
       .split(",")

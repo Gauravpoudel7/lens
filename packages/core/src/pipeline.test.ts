@@ -87,7 +87,7 @@ describe("mention pipeline", () => {
     expect(result.replyText).not.toContain("could not be verified");
     expect(result.replyText).not.toMatch(/https?:\/\//);
     expect(result.replyText.endsWith("Not financial advice.")).toBe(true);
-    expect(result.replyText).toMatch(/claims do not match/i);
+    expect(result.replyText).toMatch(/does not match/i);
     expect(result.replyText.length).toBeLessThanOrEqual(280);
     const check = await store.getCheck(result.checkId);
     expect(check?.proof?.payload).toContain(hashReply(result.replyText));
@@ -100,6 +100,31 @@ describe("mention pipeline", () => {
     );
     expect(tampered.ok).toBe(false);
     expect(x.replies[0]?.text).toBe(result.replyText);
+  });
+
+  it("does not post again when that mention already has a reply id", async () => {
+    const { rt, x, store } = deps();
+    x.seed(parent());
+    const first = await processMention(rt, {
+      id: "mention_1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@askLens is this legit?",
+      parentId: "parent_1",
+    });
+    expect(first.status).toBe("replied");
+    await store.updateMention("mention_1", { status: "processing" });
+    const before = x.replies.length;
+    const second = await processMention(rt, {
+      id: "mention_1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@askLens is this legit?",
+      parentId: "parent_1",
+    });
+    expect(second.status).toBe("already_done");
+    expect(x.replies.length).toBe(before);
+    expect((await store.getMention("mention_1"))?.status).toBe("replied");
   });
 
   it("reuses the proved reply for a second ask on the same post", async () => {

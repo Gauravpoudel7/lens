@@ -2,7 +2,12 @@ import { isActivePro } from "./accounts.js";
 import { errorMessage, log, newId } from "./ids.js";
 import type { LensDeps } from "./pipeline.js";
 import { publicSiteLabel, shortMint } from "./reply/policy.js";
+import { safeSymbol } from "./reply/sanitize.js";
 import type { CheckRecord } from "./types.js";
+
+/** One warning DM per watcher per mint per UTC day, plus these caps. */
+export const ALERTS_PER_USER_PER_DAY = 10;
+export const ALERTS_GLOBAL_PER_DAY = 100;
 
 export function warningAlertText(
   check: Pick<CheckRecord, "tokenSymbol" | "tokenMint" | "id">,
@@ -10,9 +15,8 @@ export function warningAlertText(
   includeLinks = false,
   siteLabel: string | null = null,
 ): string {
-  const who = check.tokenMint
-    ? `$${check.tokenSymbol} (${shortMint(check.tokenMint)})`
-    : `$${check.tokenSymbol}`;
+  const symbol = safeSymbol(check.tokenSymbol, check.tokenMint);
+  const who = check.tokenMint ? `$${symbol} (${shortMint(check.tokenMint)})` : `$${symbol}`;
   const closer = includeLinks
     ? `Report ${baseUrl}/r/${check.id}.`
     : siteLabel
@@ -24,10 +28,29 @@ export function warningAlertText(
 export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Promise<number> {
   if (check.riskLevel !== "HIGH") return 0;
   try {
-    const watchers = await deps.store.listProWatchers(check.tokenMint, new Date());
+    const now = new Date();
+    const watchers = await deps.store.listProWatchers(check.tokenMint, now);
+    const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const today = await deps.store.listAlertsSince(since);
+    if (today.length >= ALERTS_GLOBAL_PER_DAY) return 0;
     let sent = 0;
     for (const user of watchers) {
+      if (today.length >= ALERTS_GLOBAL_PER_DAY) break;
       if (await deps.store.hasAlert(user.id, check.id)) continue;
+      const forUser = today.filter((alert) => alert.userId === user.id);
+      if (forUser.length >= ALERTS_PER_USER_PER_DAY) continue;
+      if (forUser.some((alert) => alert.mint === check.tokenMint)) continue;
+      today.push({
+        id: "",
+        userId: user.id,
+        checkId: check.id,
+        mint: check.tokenMint,
+        text: "",
+        channel: "dm",
+        status: "sent",
+        xMessageId: null,
+        createdAt: now.toISOString(),
+      });
       const text = warningAlertText(
         check,
         deps.config.publicBaseUrl,

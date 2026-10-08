@@ -1,4 +1,4 @@
-import { log, logError, pollOnce } from "@lens/core";
+import { log, logError, pollOnce, runPollLoop } from "@lens/core";
 import { bootstrapEnv, createRuntime } from "@lens/db";
 import { createLiveXClient } from "./x-live.js";
 
@@ -24,13 +24,17 @@ async function tick(): Promise<void> {
 }
 
 if (once) {
-  await tick();
-  process.exit(0);
+  try {
+    await tick();
+    process.exit(0);
+  } catch (err) {
+    logError("poll failed", err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
 }
 
-await tick();
-setInterval(() => {
-  tick().catch((err) => {
-    logError("poll failed", err instanceof Error ? err.message : err);
-  });
-}, runtime.config.pollIntervalMs);
+await runPollLoop(runtime, runtime.config.pollIntervalMs, {
+  poll: async () => {
+    await tick();
+  },
+});

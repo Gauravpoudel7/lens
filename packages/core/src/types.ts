@@ -49,6 +49,13 @@ export interface TokenSnapshot {
   freezeAuthorityActive: boolean | null;
   sniperPct: number | null;
   burnedPct: number | null;
+  /** Token-2022 traps. Absent means the mint account was not read. */
+  permanentDelegate?: boolean | null;
+  transferFeeBps?: number | null;
+  transferFeeUnsized?: boolean | null;
+  transferHook?: boolean | null;
+  defaultFrozen?: boolean | null;
+  nonTransferable?: boolean | null;
   links: TokenLinks;
   sources: string[];
 }
@@ -182,6 +189,8 @@ export interface LensConfig {
   jupiterBaseUrl: string;
   solanaKeypair?: string;
   solanaKeypairPath?: string;
+  /** Pubkey that must have signed a chain memo. Falls back to the proof keypair. */
+  proofSigner?: string;
   outboundEnabled: boolean;
   outboundMints: string[];
   outboundDailyCap: number;

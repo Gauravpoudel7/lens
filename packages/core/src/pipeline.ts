@@ -5,6 +5,7 @@ import { listDexCandidates, type TokenCandidate } from "./discover.js";
 import { errorMessage, log, newId, utcDay } from "./ids.js";
 import { evaluateRisk, levelSummary, snapshotToRuleInput } from "./risk/engine.js";
 import { assertSafeNotice, UNRESOLVED_REPLY } from "./reply/policy.js";
+import { safeSymbol, scrubThirdPartyText } from "./reply/sanitize.js";
 import type { ReplyWriter } from "./reply/writer.js";
 import { buildProofPayload, explorerTxUrl } from "./proof/hash.js";
 import type { ProofPublisher } from "./proof/solana.js";
@@ -69,6 +70,13 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
   const existing = await deps.store.getMention(incoming.id);
   if (existing && TERMINAL.has(existing.status)) {
     return { status: "already_done", checkId: existing.checkId };
+  }
+  const postedReply = await deps.store.getPostedReply(incoming.id);
+  if (postedReply) {
+    if (existing) {
+      await deps.store.updateMention(incoming.id, { status: "replied", checkId: postedReply.checkId });
+    }
+    return { status: "already_done", checkId: postedReply.checkId };
   }
   if (!existing) {
     await deps.store.saveMention({
@@ -209,6 +217,11 @@ async function finishReply(
   check: CheckRecord,
   cached: boolean,
 ): Promise<ProcessResult> {
+  const already = await deps.store.getPostedReply(incoming.id);
+  if (already) {
+    await deps.store.updateMention(incoming.id, { status: "replied", checkId: already.checkId });
+    return { status: "already_done", checkId: already.checkId };
+  }
   try {
     const posted = await deps.x.reply({ inReplyToId: incoming.id, text: check.replyText });
     await deps.store.saveReply({
@@ -458,8 +471,8 @@ function buildCheck(input: {
     mentionId: input.mentionId,
     parentPostId: input.parentPostId,
     tokenMint: input.snapshot.mint,
-    tokenSymbol: input.snapshot.symbol,
-    tokenName: input.snapshot.name,
+    tokenSymbol: safeSymbol(input.snapshot.symbol, input.snapshot.mint),
+    tokenName: scrubThirdPartyText(input.snapshot.name).slice(0, 80) || "token",
     riskLevel: input.riskLevel,
     score: input.score,
     dangerCount: input.dangerCount,

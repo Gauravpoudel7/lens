@@ -4,6 +4,36 @@ import { scoreDueChecks } from "./outcomes.js";
 import { processMention, runOutboundCycle, type LensDeps } from "./pipeline.js";
 import { compareIds } from "./x/mock.js";
 
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * One poll at a time. The next wait starts after the previous poll finishes,
+ * including when that poll throws.
+ */
+export async function runPollLoop(
+  deps: LensDeps,
+  intervalMs: number,
+  hooks?: {
+    poll?: (deps: LensDeps) => Promise<unknown>;
+    sleep?: (ms: number) => Promise<void>;
+    signal?: AbortSignal;
+  },
+): Promise<void> {
+  const poll = hooks?.poll ?? pollOnce;
+  const wait = hooks?.sleep ?? sleep;
+  while (!hooks?.signal?.aborted) {
+    try {
+      await poll(deps);
+    } catch (err) {
+      log("poll failed", err instanceof Error ? err.message : err);
+    }
+    if (hooks?.signal?.aborted) break;
+    await wait(intervalMs);
+  }
+}
+
 export async function pollOnce(deps: LensDeps): Promise<{ seen: number; replied: number; scored: number }> {
   const since = await deps.store.getCursor("mentions");
   const posts = await deps.x.listMentions(since ?? undefined);

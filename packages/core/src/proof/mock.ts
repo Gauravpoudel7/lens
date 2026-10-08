@@ -11,8 +11,8 @@ export function createMockProofPublisher(store: LensStore): ProofPublisher {
     },
     async readMemo(signature) {
       const memo = await store.getChainMemo(signature);
-      if (!memo) return { payload: null, cluster: "mock", slotTime: null };
-      return { payload: memo.payload, cluster: memo.cluster, slotTime: null };
+      if (!memo) return { payload: null, cluster: "mock", slotTime: null, signers: [] };
+      return { payload: memo.payload, cluster: memo.cluster, slotTime: null, signers: [] };
     },
   };
 }

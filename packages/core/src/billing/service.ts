@@ -1,4 +1,5 @@
 import { isActivePro, type PaymentRecord, type UserRecord } from "../accounts.js";
+import { isSolanaAddress } from "../discover.js";
 import { newId } from "../ids.js";
 import type { LensConfig } from "../types.js";
 import type { LensStore } from "../store/types.js";
@@ -21,7 +22,8 @@ export type ConfirmFailureReason =
   | "account_missing"
   | "expired"
   | "wrong_amount"
-  | "pending";
+  | "pending"
+  | "reused_signature";
 
 export interface BillingDeps {
   config: Pick<
@@ -41,10 +43,16 @@ export async function startUsdcCheckout(
   deps: BillingDeps,
   input: { xHandle?: string | null; wallet?: string | null },
 ): Promise<{ ok: true; session: CheckoutSession; user: UserRecord } | { ok: false; error: string }> {
-  const handle = input.xHandle?.trim() ?? "";
+  const handle = (input.xHandle?.trim() ?? "").replace(/^@+/, "");
   const wallet = input.wallet?.trim() ?? "";
   if (!handle && !wallet) {
     return { ok: false, error: "Add an X handle, a wallet, or both." };
+  }
+  if (handle && !/^[A-Za-z0-9_]{1,15}$/.test(handle)) {
+    return { ok: false, error: "That X handle is not valid." };
+  }
+  if (wallet && !isSolanaAddress(wallet)) {
+    return { ok: false, error: "That wallet address is not valid." };
   }
   if (!deps.config.proTreasury) {
     return { ok: false, error: "Set PRO_TREASURY_WALLET to the wallet that should receive USDC." };
@@ -52,10 +60,9 @@ export async function startUsdcCheckout(
   if (deps.config.proPriceUsdc <= 0) {
     return { ok: false, error: "PRO_PRICE_USDC must be greater than zero." };
   }
-  const user = await deps.store.upsertUser({
-    xHandle: handle || null,
-    wallet: wallet || null,
-  });
+  const bound = await checkoutUser(deps.store, handle, wallet);
+  if (!bound.ok) return bound;
+  const user = bound.user;
   const reference = newReference();
   const amountRaw = usdcRaw(deps.config.proPriceUsdc).toString();
   const payment: PaymentRecord = {
@@ -90,6 +97,36 @@ export async function startUsdcCheckout(
   return { ok: true, session, user };
 }
 
+async function checkoutUser(
+  store: LensStore,
+  handle: string,
+  wallet: string,
+): Promise<{ ok: true; user: UserRecord } | { ok: false; error: string }> {
+  const byHandle = handle ? await store.findUser({ xHandle: handle }) : null;
+  const byWallet = wallet ? await store.findUser({ wallet }) : null;
+  if (byHandle && byWallet && byHandle.id !== byWallet.id) {
+    return { ok: false, error: "That handle and wallet belong to different accounts." };
+  }
+  const existing = byHandle ?? byWallet;
+  if (!existing) {
+    const user = await store.upsertUser({ xHandle: handle || null, wallet: wallet || null });
+    return { ok: true, user };
+  }
+  if (wallet && existing.wallet && existing.wallet !== wallet) {
+    return { ok: false, error: "That account is already tied to another wallet." };
+  }
+  if (handle && existing.xHandle && existing.xHandle !== handle.toLowerCase()) {
+    return { ok: false, error: "That wallet is already tied to another account." };
+  }
+  if (wallet && !existing.wallet) {
+    return { ok: false, error: "Checkout cannot attach a wallet to an existing account." };
+  }
+  if (handle && !existing.xHandle) {
+    return { ok: false, error: "Checkout cannot attach a handle to an existing account." };
+  }
+  return { ok: true, user: existing };
+}
+
 function fail(
   error: string,
   reason: ConfirmFailureReason,
@@ -122,8 +159,15 @@ export async function confirmUsdcCheckout(
   const observed = await deps.chain.findPayments(payment.reference);
   const match = observed.find((row) => paymentSatisfied({ payment, observed: row }));
   if (match) {
+    const prior = await deps.store.findPaymentBySignature(match.signature);
+    if (prior && prior.id !== payment.id) {
+      return fail("That transaction was already used for another checkout.", "reused_signature");
+    }
     await deps.store.updatePayment(payment.id, { status: "paid", signature: match.signature });
-    const until = new Date(now.getTime() + deps.config.proPeriodDays * 24 * 60 * 60 * 1000);
+    const periodMs = deps.config.proPeriodDays * 24 * 60 * 60 * 1000;
+    const currentEnd = user.proUntil ? Date.parse(user.proUntil) : Number.NaN;
+    const base = Math.max(now.getTime(), Number.isFinite(currentEnd) ? currentEnd : 0);
+    const until = new Date(base + periodMs);
     const pro = await deps.store.setProUntil(user.id, until.toISOString());
     return { ok: true, user: pro, signature: match.signature, already: false };
   }

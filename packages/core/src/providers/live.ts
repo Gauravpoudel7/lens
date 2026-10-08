@@ -3,6 +3,7 @@ import { log, safeUrl } from "../ids.js";
 import { withRetry } from "../net/retry.js";
 import type { LensConfig, TokenSnapshot } from "../types.js";
 import {
+  classifyMintAccount,
   holderStats,
   indexVerifiedTokens,
   mergeTokenData,
@@ -10,7 +11,6 @@ import {
   parseBirdeyeSecurity,
   parseDexTokenResponse,
   parseJupiterVerifiedTokens,
-  parseMintAccount,
   parseRugcheckReport,
   type ChainSummary,
   type VerifiedTokenRow,
@@ -76,13 +76,14 @@ export class LiveTokenDataProvider implements TokenDataProvider {
   }
 
   async getToken(mint: string): Promise<TokenSnapshot | null> {
-    const [dex, rug, chain, birdeye] = await Promise.all([
+    const [dex, rug, chainRead, birdeye] = await Promise.all([
       this.dex(mint),
       this.rug(mint),
       this.chain(mint),
       this.birdeye(mint),
     ]);
-    const merged = mergeTokenData({ mint, dex, rug, chain, birdeye });
+    if (chainRead.notMint) return null;
+    const merged = mergeTokenData({ mint, dex, rug, chain: chainRead.summary, birdeye });
     if (!merged) return null;
     if (merged.priceUsd == null) {
       merged.priceUsd = await this.jupiterPrice(mint);
@@ -162,13 +163,14 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     }
   }
 
-  private async chain(mint: string): Promise<ChainSummary | null> {
+  private async chain(mint: string): Promise<{ summary: ChainSummary | null; notMint: boolean }> {
     try {
       const account = await this.rpc("getAccountInfo", [mint, { encoding: "base64" }]);
-      const value = (account as { value?: { data?: [string, string] } | null }).value;
-      if (!value?.data?.[0]) return null;
-      const parsed = parseMintAccount(Buffer.from(value.data[0], "base64"));
-      if (!parsed) return null;
+      const value = (account as { value?: { owner?: string; data?: [string, string] } | null }).value ?? null;
+      const classified = classifyMintAccount(value);
+      if (classified.kind === "not_mint") return { summary: null, notMint: true };
+      if (classified.kind !== "mint") return { summary: null, notMint: false };
+      const parsed = classified.parsed;
       let top10HolderPct: number | null = null;
       let burnedPct: number | null = null;
       try {
@@ -178,10 +180,14 @@ export class LiveTokenDataProvider implements TokenDataProvider {
         const owners = await this.owners(rows.map((row) => row.address));
         const stats = holderStats(
           parsed.supply,
-          rows.map((row) => ({
-            amount: BigInt(row.amount),
-            owner: owners.get(row.address) ?? null,
-          })),
+          rows.map((row) => {
+            const holder = owners.get(row.address);
+            return {
+              amount: BigInt(row.amount),
+              owner: holder?.owner ?? null,
+              ownerProgram: holder?.ownerProgram ?? null,
+            };
+          }),
         );
         top10HolderPct = stats.top10HolderPct;
         burnedPct = stats.burnedPct;
@@ -189,38 +195,66 @@ export class LiveTokenDataProvider implements TokenDataProvider {
         log("holder accounts unavailable", err instanceof Error ? err.message : err);
       }
       return {
-        decimals: parsed.decimals,
-        supply: parsed.supply,
-        mintAuthorityActive: parsed.mintAuthority != null,
-        mintAuthority: parsed.mintAuthority,
-        freezeAuthorityActive: parsed.freezeAuthority != null,
-        top10HolderPct,
-        burnedPct,
+        notMint: false,
+        summary: {
+          decimals: parsed.decimals,
+          supply: parsed.supply,
+          mintAuthorityActive: parsed.mintAuthority != null,
+          mintAuthority: parsed.mintAuthority,
+          freezeAuthorityActive: parsed.freezeAuthority != null,
+          top10HolderPct,
+          burnedPct,
+          permanentDelegate: parsed.extensions.permanentDelegate,
+          transferFeeBps: parsed.extensions.transferFeeBps,
+          transferHook: parsed.extensions.transferHook,
+          defaultFrozen: parsed.extensions.defaultFrozen,
+          nonTransferable: parsed.extensions.nonTransferable,
+        },
       };
     } catch (err) {
       log("Solana RPC token read failed", err instanceof Error ? err.message : err);
-      return null;
+      return { summary: null, notMint: false };
     }
   }
 
-  private async owners(addresses: string[]): Promise<Map<string, string | null>> {
-    const result = new Map<string, string | null>();
+  private async owners(
+    addresses: string[],
+  ): Promise<Map<string, { owner: string | null; ownerProgram: string | null }>> {
+    const result = new Map<string, { owner: string | null; ownerProgram: string | null }>();
     if (addresses.length === 0) return result;
     const body = await this.rpc("getMultipleAccounts", [addresses, { encoding: "base64" }]);
-    const values = (body as { value?: Array<{ data?: [string, string] } | null> }).value ?? [];
+    const values =
+      (body as { value?: Array<{ owner?: string; data?: [string, string] } | null> }).value ?? [];
     addresses.forEach((address, index) => {
       const encoded = values[index]?.data?.[0];
       if (!encoded) {
-        result.set(address, null);
+        result.set(address, { owner: null, ownerProgram: null });
         return;
       }
       const data = Buffer.from(encoded, "base64");
       if (data.length < 64) {
-        result.set(address, null);
+        result.set(address, { owner: null, ownerProgram: null });
         return;
       }
-      result.set(address, new PublicKey(data.subarray(32, 64)).toBase58());
+      result.set(address, { owner: new PublicKey(data.subarray(32, 64)).toBase58(), ownerProgram: null });
     });
+    const authorities = [...new Set([...result.values()].map((row) => row.owner).filter((owner): owner is string => Boolean(owner)))];
+    if (authorities.length === 0) return result;
+    try {
+      const programs = await this.rpc("getMultipleAccounts", [authorities, { encoding: "base64" }]);
+      const programValues = (programs as { value?: Array<{ owner?: string } | null> }).value ?? [];
+      const programByAuthority = new Map<string, string>();
+      authorities.forEach((authority, index) => {
+        const owner = programValues[index]?.owner;
+        if (owner) programByAuthority.set(authority, owner);
+      });
+      for (const [address, row] of result) {
+        if (!row.owner) continue;
+        result.set(address, { ...row, ownerProgram: programByAuthority.get(row.owner) ?? null });
+      }
+    } catch (err) {
+      log("holder program lookup failed", err instanceof Error ? err.message : err);
+    }
     return result;
   }
 

@@ -64,8 +64,13 @@ export interface ScorecardStats {
   callWinPct: number;
 }
 
+/** Home record and /api/stats. Manual form checks and Blink loads stay on their own report URLs. */
+export const SCORECARD_KINDS: CheckKind[] = ["reply", "call", "warning", "note"];
+
 export function computeStats(checks: CheckRecord[], thresholds: OutcomeThresholds): ScorecardStats {
-  const visible = checks.filter((check) => check.kind !== "unresolved" && check.riskLevel !== "NONE");
+  const visible = checks.filter(
+    (check) => SCORECARD_KINDS.includes(check.kind) && check.riskLevel !== "NONE",
+  );
   const calls = visible.filter((check) => check.kind === "call" && check.outcome?.callResult);
   const decidedCalls = calls.filter((check) =>
     ["win", "loss", "flat"].includes(check.outcome?.callResult ?? ""),

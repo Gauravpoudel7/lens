@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { schemaFile } from "./prepare-schema.mjs";
+import { workerStopExitCode } from "./worker-stop.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
@@ -24,7 +25,7 @@ if (role === "all") {
     stdio: "inherit",
     env: process.env,
   });
-  worker.on("exit", (code, signal) => {
+  const stop = (code, signal) => {
     console.error(
       JSON.stringify({
         time: new Date().toISOString(),
@@ -35,7 +36,10 @@ if (role === "all") {
         signal,
       }),
     );
-  });
+    process.exit(workerStopExitCode(code));
+  };
+  worker.on("exit", stop);
+  worker.on("error", (err) => stop(1, err instanceof Error ? err.message : "error"));
 }
 if (role === "worker") {
   execSync("npx tsx apps/worker/src/index.ts", { stdio: "inherit", env: process.env });

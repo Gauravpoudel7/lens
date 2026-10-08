@@ -34,7 +34,9 @@ Change the Postgres password before anyone else can reach port 5432. The compose
 
 ## Railway, one service
 
-This is the path for an owner who does not want to assemble two services by hand. `railway.json` tells Railway to build the Dockerfile, start `sh scripts/docker-entry.sh`, and check `/api/health`. Set `LENS_ROLE=all` and that one container runs the website and the bot together.
+This is the path for an owner who does not want to assemble two services by hand. `railway.json` tells Railway to build the Dockerfile, start `sh scripts/docker-entry.sh`, and check `/api/health`. Set `LENS_ROLE=all` and that one container runs the website and the bot together. If the worker process exits, the container exits too, so Railway restarts it.
+
+Rate limits on the public site use the `X-Real-IP` header. Railway’s HTTP edge overwrites that header, so a visitor cannot supply their own. `X-Forwarded-For` is not used. Optional `PROOF_SIGNER` is the pubkey that must have signed proof memos. Leave it empty to use the `SOLANA_KEYPAIR` pubkey.
 
 1. Sign up at [railway.com](https://railway.com). Logging in with GitHub is enough.
 2. Click **New Project**, then **Deploy from GitHub repo**, and pick this repository. Wait until the first build finishes. It can fail until the variables below exist. That is fine.

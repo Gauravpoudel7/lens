@@ -9,6 +9,40 @@ const BURN_OWNERS = new Set([
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
+export const SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+export const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+/**
+ * Top-10 holder share skips balances we can identify as a pool or bonding curve.
+ * Two checks, and only those:
+ * 1. The token-account authority is Raydium AMM v4's well-known authority.
+ * 2. The account that owns that authority is a known AMM or pump.fun program
+ *    (Raydium v4, Raydium CPMM, Orca Whirlpool, Meteora DLMM, Meteora pools,
+ *    pump.fun, pump.fun AMM). The live reader fills `ownerProgram` from that
+ *    account's program id. Owners we cannot identify stay in the top 10.
+ */
+export const RAYDIUM_AMM_AUTHORITY = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1";
+
+export const AMM_PROGRAM_IDS = new Set([
+  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+  "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+  "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+  "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+  "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
+  "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+]);
+
+export function isSplTokenProgram(owner: string | null | undefined): boolean {
+  return owner === SPL_TOKEN_PROGRAM_ID || owner === TOKEN_2022_PROGRAM_ID;
+}
+
+export function isPoolHolder(owner: string | null | undefined, ownerProgram?: string | null): boolean {
+  if (!owner) return false;
+  if (owner === RAYDIUM_AMM_AUTHORITY) return true;
+  return Boolean(ownerProgram && AMM_PROGRAM_IDS.has(ownerProgram));
+}
+
 export interface DexSummary {
   symbol: string;
   name: string;
@@ -26,6 +60,11 @@ export interface ChainSummary {
   freezeAuthorityActive: boolean;
   top10HolderPct: number | null;
   burnedPct: number | null;
+  permanentDelegate: boolean;
+  transferFeeBps: number | null;
+  transferHook: boolean;
+  defaultFrozen: boolean;
+  nonTransferable: boolean;
 }
 
 export interface RugSummary {
@@ -42,6 +81,12 @@ export interface RugSummary {
   lpLocked: boolean | null;
   priceUsd: number | null;
   liquidityUsd: number | null;
+  permanentDelegate: boolean | null;
+  transferFeeBps: number | null;
+  transferFeeUnsized: boolean | null;
+  transferHook: boolean | null;
+  defaultFrozen: boolean | null;
+  nonTransferable: boolean | null;
 }
 
 export interface BirdeyeSummary {
@@ -71,9 +116,78 @@ export function parseMintAccount(data: Buffer): {
   return { supply, decimals, mintAuthority, freezeAuthority };
 }
 
+/** Token-2022 mint extensions start at byte 166 (165-byte base, then a 1-byte account type). */
+const MINT_TLV_START = 166;
+const EXT_TRANSFER_FEE_CONFIG = 1;
+const EXT_DEFAULT_ACCOUNT_STATE = 6;
+const EXT_NON_TRANSFERABLE = 9;
+const EXT_PERMANENT_DELEGATE = 12;
+const EXT_TRANSFER_HOOK = 14;
+
+export interface MintExtensions {
+  permanentDelegate: boolean;
+  transferFeeBps: number | null;
+  transferHook: boolean;
+  defaultFrozen: boolean;
+  nonTransferable: boolean;
+}
+
+export function parseMintExtensions(data: Buffer): MintExtensions {
+  const found: MintExtensions = {
+    permanentDelegate: false,
+    transferFeeBps: null,
+    transferHook: false,
+    defaultFrozen: false,
+    nonTransferable: false,
+  };
+  if (data.length <= MINT_TLV_START) return found;
+  let offset = MINT_TLV_START;
+  while (offset + 4 <= data.length) {
+    const type = data.readUInt16LE(offset);
+    const length = data.readUInt16LE(offset + 2);
+    const start = offset + 4;
+    if (length < 0 || start + length > data.length) break;
+    const body = data.subarray(start, start + length);
+    if (type === EXT_PERMANENT_DELEGATE && body.length >= 32) {
+      const delegate = new PublicKey(body.subarray(0, 32)).toBase58();
+      if (delegate !== SYSTEM_PROGRAM) found.permanentDelegate = true;
+    } else if (type === EXT_TRANSFER_FEE_CONFIG && body.length >= 2) {
+      found.transferFeeBps = body.readUInt16LE(body.length - 2);
+    } else if (type === EXT_TRANSFER_HOOK && body.length >= 68) {
+      const program = new PublicKey(body.subarray(36, 68)).toBase58();
+      if (program !== SYSTEM_PROGRAM) found.transferHook = true;
+    } else if (type === EXT_DEFAULT_ACCOUNT_STATE && body.length >= 1) {
+      found.defaultFrozen = body[0] === 2;
+    } else if (type === EXT_NON_TRANSFERABLE) {
+      found.nonTransferable = true;
+    }
+    offset = start + length;
+  }
+  return found;
+}
+
+export function classifyMintAccount(
+  value: { owner?: string | null; data?: [string, string] | null } | null | undefined,
+):
+  | { kind: "not_mint" }
+  | { kind: "unavailable" }
+  | {
+      kind: "mint";
+      parsed: NonNullable<ReturnType<typeof parseMintAccount>> & { extensions: MintExtensions };
+    } {
+  if (!value) return { kind: "not_mint" };
+  if (!isSplTokenProgram(value.owner)) return { kind: "not_mint" };
+  const raw = value.data?.[0];
+  if (!raw) return { kind: "unavailable" };
+  const bytes = Buffer.from(raw, "base64");
+  const parsed = parseMintAccount(bytes);
+  if (!parsed) return { kind: "not_mint" };
+  return { kind: "mint", parsed: { ...parsed, extensions: parseMintExtensions(bytes) } };
+}
+
 export function holderStats(
   supply: bigint,
-  accounts: Array<{ amount: bigint; owner: string | null }>,
+  accounts: Array<{ amount: bigint; owner: string | null; ownerProgram?: string | null }>,
 ): { top10HolderPct: number | null; burnedPct: number | null } {
   if (supply <= 0n) return { top10HolderPct: null, burnedPct: null };
   let burned = 0n;
@@ -82,6 +196,10 @@ export function holderStats(
   for (const account of accounts) {
     if (account.owner && BURN_OWNERS.has(account.owner)) {
       burned += account.amount;
+      ownersKnown = true;
+      continue;
+    }
+    if (isPoolHolder(account.owner, account.ownerProgram)) {
       ownersKnown = true;
       continue;
     }
@@ -246,7 +364,11 @@ export function parseRugcheckReport(body: unknown, now = new Date()): RugSummary
       .filter((holder) => typeof holder.owner === "string" && BURN_OWNERS.has(holder.owner))
       .reduce((sum, holder) => sum + numberOrZero(holder.pct), 0);
     top10HolderPct = ranked
-      .filter((holder) => !(typeof holder.owner === "string" && BURN_OWNERS.has(holder.owner)))
+      .filter((holder) => {
+        if (typeof holder.owner !== "string") return true;
+        if (BURN_OWNERS.has(holder.owner)) return false;
+        return !isPoolHolder(holder.owner);
+      })
       .slice(0, 10)
       .reduce((sum, holder) => sum + numberOrZero(holder.pct), 0);
   }
@@ -266,7 +388,47 @@ export function parseRugcheckReport(body: unknown, now = new Date()): RugSummary
     lpLocked: rugLpLocked(report, now),
     priceUsd: numberOrNull(report.price),
     liquidityUsd: numberOrNull(report.totalMarketLiquidity),
+    ...rugTraps(report),
   };
+}
+
+function rugTraps(report: Record<string, unknown>): Pick<
+  RugSummary,
+  | "permanentDelegate"
+  | "transferFeeBps"
+  | "transferFeeUnsized"
+  | "transferHook"
+  | "defaultFrozen"
+  | "nonTransferable"
+> {
+  const found = {
+    permanentDelegate: null as boolean | null,
+    transferFeeBps: null as number | null,
+    transferFeeUnsized: null as boolean | null,
+    transferHook: null as boolean | null,
+    defaultFrozen: null as boolean | null,
+    nonTransferable: null as boolean | null,
+  };
+  const risks = Array.isArray(report.risks) ? report.risks : [];
+  for (const risk of risks) {
+    if (!risk || typeof risk !== "object") continue;
+    const row = risk as { name?: unknown; description?: unknown };
+    const label = `${typeof row.name === "string" ? row.name : ""} ${typeof row.description === "string" ? row.description : ""}`.toLowerCase();
+    if (/permanent delegate/.test(label)) found.permanentDelegate = true;
+    if (/transfer hook/.test(label)) found.transferHook = true;
+    if (/non-?transferable/.test(label)) found.nonTransferable = true;
+    if (/default account state|frozen by default|accounts? start frozen/.test(label)) found.defaultFrozen = true;
+    if (/transfer fee/.test(label)) {
+      const match = label.match(/(\d+(?:\.\d+)?)\s*%/);
+      if (match) {
+        const bps = Math.round(Number(match[1]) * 100);
+        if (Number.isFinite(bps)) found.transferFeeBps = bps;
+      } else {
+        found.transferFeeUnsized = true;
+      }
+    }
+  }
+  return found;
 }
 
 function rugSniperPct(report: Record<string, unknown>, supply: number | null): number | null {
@@ -375,6 +537,12 @@ export function mergeTokenData(input: {
       chain?.freezeAuthorityActive ?? birdeye?.freezeAuthorityActive ?? rug?.freezeAuthorityActive ?? null,
     sniperPct: birdeye?.sniperPct ?? rug?.sniperPct ?? null,
     burnedPct: chain?.burnedPct ?? rug?.burnedPct ?? null,
+    permanentDelegate: chain ? chain.permanentDelegate : (rug?.permanentDelegate ?? null),
+    transferFeeBps: chain ? chain.transferFeeBps : (rug?.transferFeeBps ?? null),
+    transferFeeUnsized: chain ? false : (rug?.transferFeeUnsized ?? null),
+    transferHook: chain ? chain.transferHook : (rug?.transferHook ?? null),
+    defaultFrozen: chain ? chain.defaultFrozen : (rug?.defaultFrozen ?? null),
+    nonTransferable: chain ? chain.nonTransferable : (rug?.nonTransferable ?? null),
     links,
     sources,
   };

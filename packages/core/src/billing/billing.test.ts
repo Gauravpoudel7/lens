@@ -167,6 +167,66 @@ describe("solana pay", () => {
     if (late.ok) expect(late.user.tier).toBe("pro");
   });
 
+  it("does not rebind an existing account during checkout", async () => {
+    const store = new MemoryStore();
+    const cfg = config();
+    const victimWallet = "6bzZwnSvBLur1xr9baRyHZ3Ck4GgiUCUZf8YQ3oXBEm5";
+    const attackerWallet = "6CdesJcNbTV5bJ1zVuRNmvbtVtgT3ccchyNT5MbKuKTM";
+    await store.upsertUser({ xHandle: "victim", wallet: victimWallet });
+    const taken = await startUsdcCheckout(
+      { config: cfg, store, chain: { async findPayments() { return []; } } },
+      { xHandle: "victim", wallet: attackerWallet },
+    );
+    expect(taken.ok).toBe(false);
+    expect((await store.findUser({ xHandle: "victim" }))?.wallet).toBe(victimWallet);
+
+    await store.upsertUser({ xHandle: "mentiononly" });
+    const bind = await startUsdcCheckout(
+      { config: cfg, store, chain: { async findPayments() { return []; } } },
+      { xHandle: "mentiononly", wallet: victimWallet },
+    );
+    expect(bind.ok).toBe(false);
+    expect((await store.findUser({ xHandle: "mentiononly" }))?.wallet).toBeNull();
+
+    const invalid = await startUsdcCheckout(
+      { config: cfg, store, chain: { async findPayments() { return []; } } },
+      { xHandle: "newpayer", wallet: "not-a-wallet" },
+    );
+    expect(invalid.ok).toBe(false);
+  });
+
+  it("refuses a reused payment signature and extends Pro from the current end", async () => {
+    const store = new MemoryStore();
+    const cfg = config();
+    const chain: PaymentChain = {
+      async findPayments(reference) {
+        return [
+          {
+            signature: "same-sig",
+            accountKeys: [reference, treasury],
+            pre: [],
+            post: [{ owner: treasury, mint: USDC_MINT_MAINNET, amount: "10000000" }],
+          },
+        ];
+      },
+    };
+    const deps = { config: cfg, store, chain };
+    const first = await startUsdcCheckout(deps, { xHandle: "payer", wallet: treasury });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    await store.setProUntil(first.user.id, "2026-12-01T00:00:00.000Z");
+    const renewed = await confirmUsdcCheckout(deps, first.session.reference, new Date("2026-11-01T00:00:00.000Z"));
+    expect(renewed.ok).toBe(true);
+    if (!renewed.ok) return;
+    expect(renewed.user.proUntil?.startsWith("2026-12-31")).toBe(true);
+
+    const second = await startUsdcCheckout(deps, { xHandle: "otherpayer" });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const reused = await confirmUsdcCheckout(deps, second.session.reference);
+    expect(reused).toMatchObject({ ok: false, reason: "reused_signature" });
+  });
+
   it("keeps card checkout behind the same rail interface", async () => {
     const card = createCardRail();
     expect(card.id).toBe("card");

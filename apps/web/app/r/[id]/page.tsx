@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { levelSummary, verifyPostedText, xStatusUrl, type Fact, type Signal } from "@lens/core";
+import { configuredProofSigner, levelSummary, verifyPostedText, xStatusUrl, type Fact, type Signal } from "@lens/core";
 import { MintLine } from "@/components/mint-line";
 import { TokenLogo } from "@/components/token-logo";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   const verification =
     check.proof?.txSignature != null
-      ? await verifyPostedText(rt.proofs, check.replyText, check.proof.txSignature)
+      ? await verifyPostedText(
+          rt.proofs,
+          check.replyText,
+          check.proof.txSignature,
+          configuredProofSigner(rt.config),
+        )
       : null;
   const postUrl = xStatusUrl(check.xPostId);
   const unscored = check.riskLevel === "NONE";

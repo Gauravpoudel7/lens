@@ -109,15 +109,46 @@ describe("risk rules", () => {
     expect(report.level).toBe("MEDIUM");
   });
 
-  it("flags a burned claim that the chain does not support", () => {
+  it("does not treat an unverifiable burn claim as danger", () => {
     const report = evaluateRisk(
       base({
         claims: { burned: true, locked: false },
         burnedPct: 0,
       }),
     );
+    expect(report.level).toBe("LOW");
+    expect(report.facts.find((fact) => fact.id === "claims")?.signal).toBe("unknown");
+  });
+
+  it("flags a burn claim when the chain shows a smaller burn", () => {
+    const report = evaluateRisk(
+      base({
+        claims: { burned: true, locked: false },
+        burnedPct: 4,
+      }),
+    );
     expect(report.level).toBe("MEDIUM");
     expect(report.facts.find((fact) => fact.id === "claims")?.signal).toBe("danger");
+  });
+
+  it("does not award LOW when mint or freeze authority could not be read", () => {
+    const unreadMint = evaluateRisk(base({ mintAuthorityActive: null }));
+    const unreadFreeze = evaluateRisk(base({ freezeAuthorityActive: null }));
+    expect(unreadMint.level).toBe("MEDIUM");
+    expect(unreadFreeze.level).toBe("MEDIUM");
+    expect(unreadMint.facts.find((fact) => fact.id === "authority_unread")?.signal).toBe("caution");
+  });
+
+  it("keeps a permanent delegate or a large transfer fee off LOW", () => {
+    const delegate = evaluateRisk(base({ permanentDelegate: true }));
+    const fee = evaluateRisk(base({ transferFeeBps: 500 }));
+    const unsized = evaluateRisk(base({ transferFeeUnsized: true }));
+    expect(delegate.level).not.toBe("LOW");
+    expect(fee.level).not.toBe("LOW");
+    expect(unsized.level).not.toBe("LOW");
+    expect(delegate.facts.find((fact) => fact.id === "permanent_delegate")?.signal).toBe("danger");
+    expect(fee.facts.find((fact) => fact.id === "transfer_fee")?.signal).toBe("danger");
+    expect(delegate.facts.map((fact) => fact.text).join(" ")).not.toMatch(/scam/i);
   });
 
   it("raises a false lock claim plus another danger to HIGH", () => {

@@ -3,12 +3,15 @@ import type { LensConfig } from "../types.js";
 import {
   buildTemplateReply,
   closerLine,
+  DISCLAIMER,
   enforceReplyPolicy,
   factsForReply,
   publicSiteLabel,
+  replyHeader,
   shortMint,
   type ReplyDraftInput,
 } from "./policy.js";
+import { prepareReplyDraft, scrubThirdPartyText } from "./sanitize.js";
 
 export interface ReplyWriter {
   write(input: ReplyDraftInput): Promise<{ text: string; mode: "llm" | "template" }>;
@@ -54,15 +57,16 @@ export function createReplyWriter(config: WriterConfig): ReplyWriter {
         includeLinks: config.xReplyLinks === true,
         siteLabel: input.siteLabel ?? publicSiteLabel(config),
       };
-      const template = buildTemplateReply(draft);
-      const enforcedTemplate = enforceReplyPolicy(template, draft);
-      const fallback = enforcedTemplate.ok ? enforcedTemplate.text : template;
+      const safe = prepareReplyDraft(draft);
+      const template = buildTemplateReply(safe);
+      const enforcedTemplate = enforceReplyPolicy(template, safe);
+      const fallback = enforcedTemplate.ok ? enforcedTemplate.text : safeFallbackReply(safe);
       if (config.llmMode === "template" || !config.llmApiKey) {
         return { text: fallback, mode: "template" };
       }
       try {
-        const drafted = await draftWithLlm(config, draft);
-        const enforced = enforceReplyPolicy(drafted, draft);
+        const drafted = scrubThirdPartyText(await draftWithLlm(config, safe));
+        const enforced = enforceReplyPolicy(drafted, safe);
         if (!enforced.ok) {
           log(`LLM reply rejected (${enforced.reason}); using template`);
           return { text: fallback, mode: "template" };
@@ -74,6 +78,13 @@ export function createReplyWriter(config: WriterConfig): ReplyWriter {
       }
     },
   };
+}
+
+export function safeFallbackReply(input: ReplyDraftInput): string {
+  const text = `${replyHeader(input.symbol, input.riskLevel, input.mint)}\n${DISCLAIMER}`;
+  const enforced = enforceReplyPolicy(text, { ...input, facts: [] });
+  if (enforced.ok) return enforced.text;
+  return `${input.riskLevel} risk.\n${DISCLAIMER}`;
 }
 
 async function draftWithLlm(config: WriterConfig, input: ReplyDraftInput): Promise<string> {

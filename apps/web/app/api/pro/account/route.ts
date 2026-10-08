@@ -1,5 +1,6 @@
-import { isActivePro, proStatus } from "@lens/core";
+import { redactAccount } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
+import { readWalletProof, walletUnlocks } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,19 @@ export async function GET(request: Request) {
   const user =
     (wallet ? await rt.store.findUser({ wallet }) : null) ??
     (handle ? await rt.store.findUser({ xHandle: handle }) : null);
-  if (!user) return Response.json({ user: null, watches: [], tier: "free" });
-  const watches = await rt.store.listWatches(user.id);
-  return Response.json({
-    user,
-    watches,
-    ...proStatus(user),
-    active: isActivePro(user),
+  const proof = readWalletProof({
+    proofWallet: url.searchParams.get("proofWallet"),
+    nonce: url.searchParams.get("nonce"),
+    expiresAt: url.searchParams.get("expiresAt"),
+    signature: url.searchParams.get("signature"),
   });
+  const watches = user && walletUnlocks(user, proof) ? await rt.store.listWatches(user.id) : [];
+  return Response.json(
+    redactAccount({
+      user,
+      watches,
+      queriedHandle: handle,
+      unlocked: walletUnlocks(user, proof),
+    }),
+  );
 }

@@ -15,7 +15,7 @@ export interface LensStore {
     id: string,
     patch: Partial<Pick<CheckRecord, "status" | "error" | "xPostId">>,
   ): Promise<void>;
-  listChecks(opts?: { limit?: number }): Promise<CheckRecord[]>;
+  listChecks(opts?: { limit?: number; kinds?: CheckRecord["kind"][] }): Promise<CheckRecord[]>;
   findReusableCheck(parentPostId: string, mint: string): Promise<CheckRecord | null>;
   latestCheckForMint(mint: string, maxAgeMs: number, now?: Date): Promise<CheckRecord | null>;
 
@@ -28,6 +28,7 @@ export interface LensStore {
     cached: boolean;
   }): Promise<void>;
   hasReplyForMention(mentionId: string): Promise<boolean>;
+  getPostedReply(mentionId: string): Promise<{ checkId: string; xReplyId: string } | null>;
 
   getDailyCount(userId: string, day: string): Promise<number>;
   incrementDailyCount(userId: string, day: string): Promise<number>;
@@ -61,6 +62,7 @@ export interface LensStore {
 
   savePayment(payment: PaymentRecord): Promise<void>;
   getPaymentByReference(reference: string): Promise<PaymentRecord | null>;
+  findPaymentBySignature(signature: string): Promise<PaymentRecord | null>;
   updatePayment(
     id: string,
     patch: Partial<Pick<PaymentRecord, "status" | "signature">>,
@@ -69,6 +71,7 @@ export interface LensStore {
   saveAlert(alert: AlertRecord): Promise<void>;
   hasAlert(userId: string, checkId: string): Promise<boolean>;
   listAlertsByStatus(status: AlertRecord["status"]): Promise<AlertRecord[]>;
+  listAlertsSince(sinceIso: string): Promise<AlertRecord[]>;
   updateAlert(
     id: string,
     patch: Partial<Pick<AlertRecord, "status" | "xMessageId">>,

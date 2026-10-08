@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Notice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { tickerNoticeTitle } from "@/lib/notices";
 
@@ -15,7 +14,6 @@ export function CheckForm({
 }) {
   const router = useRouter();
   const [input, setInput] = useState("");
-  const [wallet, setWallet] = useState("");
   const [error, setError] = useState<{ kind: "notice" | "error"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -32,7 +30,7 @@ export function CheckForm({
       const response = await fetch("/api/check", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: value, wallet: wallet.trim() || undefined }),
+        body: JSON.stringify({ input: value }),
       });
       const body = (await response.json()) as { id?: string; error?: string };
       if (!response.ok || !body.id) {
@@ -63,21 +61,6 @@ export function CheckForm({
           placeholder="Paste a Solana mint, or a post that names $TICKER"
           disabled={pending}
         />
-      </div>
-      <div>
-        <label htmlFor="pro-wallet" className="text-sm text-muted">
-          Pro wallet, optional
-        </label>
-        <Input
-          id="pro-wallet"
-          className="mt-2"
-          value={wallet}
-          onChange={(event) => setWallet(event.target.value)}
-          placeholder="The wallet that paid for Pro"
-          disabled={pending}
-          autoComplete="off"
-        />
-        <p className="mt-2 text-sm text-faint">This is not a login. It only skips the hourly limit when that wallet is Pro.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {examples.map((example) => (

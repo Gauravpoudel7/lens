@@ -59,9 +59,11 @@ export class MemoryStore implements LensStore {
     this.checks.set(id, { ...current, ...patch });
   }
 
-  async listChecks(opts?: { limit?: number }): Promise<CheckRecord[]> {
+  async listChecks(opts?: { limit?: number; kinds?: CheckRecord["kind"][] }): Promise<CheckRecord[]> {
     const limit = opts?.limit ?? 500;
+    const kinds = opts?.kinds ? new Set(opts.kinds) : null;
     return [...this.checks.values()]
+      .filter((check) => !kinds || kinds.has(check.kind))
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, limit)
       .map(clone);
@@ -110,6 +112,15 @@ export class MemoryStore implements LensStore {
       if (reply.mentionId === mentionId) return true;
     }
     return false;
+  }
+
+  async getPostedReply(mentionId: string): Promise<{ checkId: string; xReplyId: string } | null> {
+    for (const reply of this.replies.values()) {
+      if (reply.mentionId === mentionId && reply.xReplyId) {
+        return { checkId: reply.checkId, xReplyId: reply.xReplyId };
+      }
+    }
+    return null;
   }
 
   async getDailyCount(userId: string, day: string): Promise<number> {
@@ -260,6 +271,12 @@ export class MemoryStore implements LensStore {
     return found ? clone(found) : null;
   }
 
+  async findPaymentBySignature(signature: string): Promise<PaymentRecord | null> {
+    if (!signature) return null;
+    const found = [...this.payments.values()].find((payment) => payment.signature === signature);
+    return found ? clone(found) : null;
+  }
+
   async updatePayment(
     id: string,
     patch: Partial<Pick<PaymentRecord, "status" | "signature">>,
@@ -279,6 +296,13 @@ export class MemoryStore implements LensStore {
 
   async listAlertsByStatus(status: AlertRecord["status"]): Promise<AlertRecord[]> {
     return [...this.alerts.values()].filter((alert) => alert.status === status).map(clone);
+  }
+
+  async listAlertsSince(sinceIso: string): Promise<AlertRecord[]> {
+    const since = Date.parse(sinceIso);
+    return [...this.alerts.values()]
+      .filter((alert) => Date.parse(alert.createdAt) >= since)
+      .map(clone);
   }
 
   async updateAlert(

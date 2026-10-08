@@ -20,8 +20,8 @@ export default async function CheckPage() {
         lede="Paste a mint, a $ticker, or the text of a post. Lens scores it, writes the reply, and stores the proof before the report opens. If several coins share the ticker, or it is SOL, a stablecoin, or not a Solana token, you get a notice instead of a level."
       />
       <p className="mt-4 max-w-2xl text-sm leading-6 text-faint">
-        Free checks from one IP are limited to {config.checkApiLimitPerHour} an hour. A Pro wallet on the form skips
-        that limit. On X, free accounts get {config.rateLimitPerUserPerDay} replies a day.
+        Free checks from one network address are limited to {config.checkApiLimitPerHour} an hour. On X, free
+        accounts get {config.rateLimitPerUserPerDay} replies a day.
       </p>
       <CheckForm
         examples={[

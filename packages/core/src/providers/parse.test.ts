@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
+  AMM_PROGRAM_IDS,
+  RAYDIUM_AMM_AUTHORITY,
+  SPL_TOKEN_PROGRAM_ID,
+  classifyMintAccount,
   holderStats,
   interpretLpLock,
   matchVerifiedSymbol,
   parseDexTokenResponse,
   parseJupiterVerifiedTokens,
   parseMintAccount,
+  parseMintExtensions,
   parseRugcheckReport,
 } from "./parse.js";
 
@@ -35,6 +40,58 @@ describe("live data parsers", () => {
     ]);
     expect(stats.burnedPct).toBe(40);
     expect(stats.top10HolderPct).toBe(25);
+  });
+
+  it("leaves pool vaults and bonding-curve accounts out of the top 10", () => {
+    const [pump] = [...AMM_PROGRAM_IDS].filter((id) => id.startsWith("6EF8"));
+    const stats = holderStats(1000n, [
+      { amount: 700n, owner: RAYDIUM_AMM_AUTHORITY },
+      { amount: 200n, owner: "curve-authority", ownerProgram: pump },
+      { amount: 100n, owner: new PublicKey(Buffer.alloc(32, 4)).toBase58() },
+    ]);
+    expect(stats.top10HolderPct).toBe(10);
+  });
+
+  it("reads Token-2022 traps from mint extension bytes", () => {
+    const delegate = Keypair.generate().publicKey;
+    const hook = Keypair.generate().publicKey;
+    const data = Buffer.alloc(166 + 4 + 32 + 4 + 116 + 4 + 68 + 4 + 1 + 4);
+    data[165] = 1;
+    let offset = 166;
+    const write = (type: number, body: Buffer) => {
+      data.writeUInt16LE(type, offset);
+      data.writeUInt16LE(body.length, offset + 2);
+      body.copy(data, offset + 4);
+      offset += 4 + body.length;
+    };
+    write(12, Buffer.from(delegate.toBytes()));
+    const fee = Buffer.alloc(116);
+    fee.writeUInt16LE(800, 114);
+    write(1, fee);
+    const hookBody = Buffer.alloc(68);
+    hookBody.set(hook.toBytes(), 36);
+    write(14, hookBody);
+    write(6, Buffer.from([2]));
+    write(9, Buffer.alloc(0));
+    const extensions = parseMintExtensions(data.subarray(0, offset));
+    expect(extensions.permanentDelegate).toBe(true);
+    expect(extensions.transferFeeBps).toBe(800);
+    expect(extensions.transferHook).toBe(true);
+    expect(extensions.defaultFrozen).toBe(true);
+    expect(extensions.nonTransferable).toBe(true);
+  });
+
+  it("rejects an account that is not owned by a token program", () => {
+    const data = Buffer.alloc(82);
+    data.writeUInt32LE(0, 0);
+    data.writeBigUInt64LE(1n, 36);
+    data.writeUInt32LE(0, 46);
+    const encoded = data.toString("base64");
+    expect(classifyMintAccount({ owner: "11111111111111111111111111111111", data: [encoded, "base64"] }).kind).toBe(
+      "not_mint",
+    );
+    expect(classifyMintAccount(null).kind).toBe("not_mint");
+    expect(classifyMintAccount({ owner: SPL_TOKEN_PROGRAM_ID, data: [encoded, "base64"] }).kind).toBe("mint");
   });
 
   it("picks the deepest Solana pair and the earliest pool time", () => {
@@ -172,5 +229,18 @@ describe("live data parsers", () => {
     expect(summary?.freezeAuthorityActive).toBe(false);
     expect(summary?.sniperPct).toBe(0);
     expect(summary?.symbol).toBe("COIN");
+  });
+
+  it("reads Token-2022 risks from a RugCheck report", () => {
+    const summary = parseRugcheckReport({
+      token: { mintAuthority: null, freezeAuthority: null, supply: 1000 },
+      tokenMeta: { symbol: "FEE", name: "Fee" },
+      risks: [
+        { name: "Permanent Delegate", description: "A delegate can move tokens" },
+        { name: "Transfer Fee", description: "Transfer fee of 8%" },
+      ],
+    });
+    expect(summary?.permanentDelegate).toBe(true);
+    expect(summary?.transferFeeBps).toBe(800);
   });
 });

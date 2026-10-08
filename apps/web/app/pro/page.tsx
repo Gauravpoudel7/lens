@@ -53,7 +53,7 @@ export default async function ProPage() {
             rows={[
               ["Price", `${price} USDC every ${days} days`],
               ["Checks on X", "No personal daily cap"],
-              ["Checks on this site", "The paying wallet skips that hourly limit"],
+              ["Checks on this site", `${hourly} an hour per IP`],
               ["Watchlist", "DM when a watched mint is HIGH"],
               ["Risk level", "The same rules. Paying does not change a level."],
               ["Bot-wide limit", "The same shared limit. Pro does not skip it."],
@@ -83,7 +83,7 @@ export default async function ProPage() {
                 free={`${freeDaily} a day for your account`}
                 pro="No personal daily cap"
               />
-              <Row label="Checks on this site" free={`${hourly} an hour per IP`} pro="The paying wallet skips that hourly limit" />
+              <Row label="Checks on this site" free={`${hourly} an hour per IP`} pro={`${hourly} an hour per IP`} />
               <Row label="Watchlist" free="Not included" pro="DM when a watched mint is HIGH" />
               <Row label="Risk level" free="The published rules" pro="The same rules. Paying does not change a level." />
               <Row

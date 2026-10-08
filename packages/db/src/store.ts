@@ -214,6 +214,7 @@ export function createPrismaStore(): LensStore {
     },
     async listChecks(opts) {
       const rows = await prisma.check.findMany({
+        where: opts?.kinds?.length ? { kind: { in: opts.kinds } } : undefined,
         include,
         orderBy: { createdAt: "desc" },
         take: opts?.limit ?? 500,
@@ -261,6 +262,14 @@ export function createPrismaStore(): LensStore {
     async hasReplyForMention(mentionId) {
       const count = await prisma.reply.count({ where: { mentionId } });
       return count > 0;
+    },
+    async getPostedReply(mentionId) {
+      const row = await prisma.reply.findFirst({
+        where: { mentionId, xReplyId: { not: null } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!row?.xReplyId) return null;
+      return { checkId: row.checkId, xReplyId: row.xReplyId };
     },
     async getDailyCount(userId, day) {
       const row = await prisma.usageDay.findUnique({ where: { xUserId_day: { xUserId: userId, day } } });
@@ -411,6 +420,11 @@ export function createPrismaStore(): LensStore {
       const row = await prisma.payment.findUnique({ where: { reference } });
       return row ? toPayment(row) : null;
     },
+    async findPaymentBySignature(signature) {
+      if (!signature) return null;
+      const row = await prisma.payment.findFirst({ where: { signature } });
+      return row ? toPayment(row) : null;
+    },
     async updatePayment(id, patch) {
       await prisma.payment.update({ where: { id }, data: patch });
     },
@@ -435,6 +449,13 @@ export function createPrismaStore(): LensStore {
     },
     async listAlertsByStatus(status) {
       const rows = await prisma.alert.findMany({ where: { status }, orderBy: { createdAt: "asc" } });
+      return rows.map(toAlert);
+    },
+    async listAlertsSince(sinceIso) {
+      const rows = await prisma.alert.findMany({
+        where: { createdAt: { gte: new Date(sinceIso) } },
+        orderBy: { createdAt: "asc" },
+      });
       return rows.map(toAlert);
     },
     async updateAlert(id, patch) {

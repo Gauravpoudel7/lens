@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeStats, judgeOutcome, sharpeRatio } from "./outcomes.js";
+import { SCORECARD_KINDS, computeStats, judgeOutcome, sharpeRatio } from "./outcomes.js";
+import { MemoryStore } from "./store/memory.js";
 import type { CheckRecord } from "./types.js";
 
 describe("outcome scoring", () => {
@@ -64,6 +65,24 @@ describe("outcome scoring", () => {
     expect(stats.labelAccuracy).toBeCloseTo(2 / 3);
     expect(stats.sharpe).not.toBeNull();
     expect(sharpeRatio([0.2])).toBeNull();
+  });
+
+  it("leaves blink and manual checks out of the scorecard", () => {
+    const checks = [
+      row("call", "LOW", "win", true, 29),
+      row("blink", "HIGH", "n/a", true, -80),
+      row("manual", "LOW", "n/a", true, 5),
+    ];
+    const stats = computeStats(checks, { windowDays: 7, sharpDropPct: -30, callWinPct: 20 });
+    expect(stats.totalChecks).toBe(1);
+  });
+
+  it("keeps blink rows from crowding the scorecard query", async () => {
+    const store = new MemoryStore();
+    await store.saveCheck(row("blink", "HIGH", "n/a", true, -10));
+    await store.saveCheck(row("reply", "LOW", "n/a", true, 1));
+    const listed = await store.listChecks({ limit: 1, kinds: SCORECARD_KINDS });
+    expect(listed.map((check) => check.kind)).toEqual(["reply"]);
   });
 });
 

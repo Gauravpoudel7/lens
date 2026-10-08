@@ -15,6 +15,9 @@ export const SNIPER_CAUTION_PCT = 15;
 
 export const BURN_MATCH_PCT = 10;
 
+/** 5%. A transfer fee at or above this is danger and cannot be LOW. */
+export const TRANSFER_FEE_DANGER_BPS = 500;
+
 export const DANGER_WEIGHT = 3;
 export const CAUTION_WEIGHT = 1;
 

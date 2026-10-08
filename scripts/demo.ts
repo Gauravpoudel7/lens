@@ -3,6 +3,7 @@ import {
   FIXTURES,
   MockTokenDataProvider,
   MockXClient,
+  SCORECARD_KINDS,
   computeStats,
   processMention,
   publishOutbound,
@@ -58,7 +59,7 @@ if (!existing || existing.status === "processing" || existing.status === "error"
   console.log(`\nMention already recorded (${existing.status}).`);
 }
 
-const checks = await rt.store.listChecks({ limit: 500 });
+const checks = await rt.store.listChecks({ limit: 500, kinds: SCORECARD_KINDS });
 const safe = checks.find((check) => check.tokenMint === FIXTURES.safe.mint && check.kind === "call");
 if (!safe) {
   const posted = await publishOutbound(rt, FIXTURES.safe.mint);
@@ -77,7 +78,7 @@ rt.provider.setPrice(FIXTURES.safe.mint, FIXTURES.safe.priceAfterWindow);
 const scored = await scoreDueChecks(rt, { windowDays: 0 });
 console.log(`\nScored ${scored} check${scored === 1 ? "" : "s"}.`);
 
-const latest = await rt.store.listChecks({ limit: 20 });
+const latest = await rt.store.listChecks({ limit: 20, kinds: SCORECARD_KINDS });
 const stats = computeStats(latest, {
   windowDays: 0,
   sharpDropPct: rt.config.sharpDropPct,

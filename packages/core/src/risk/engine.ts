@@ -5,6 +5,7 @@ import {
   AGE_DANGER_HOURS,
   BURN_MATCH_PCT,
   CAUTION_WEIGHT,
+  TRANSFER_FEE_DANGER_BPS,
   CREATOR_SOLD_CAUTION_PCT,
   CREATOR_SOLD_DANGER_PCT,
   DANGER_WEIGHT,
@@ -34,6 +35,12 @@ export interface RuleInput {
   freezeAuthorityActive: boolean | null;
   sniperPct: number | null;
   burnedPct: number | null;
+  permanentDelegate?: boolean | null;
+  transferFeeBps?: number | null;
+  transferFeeUnsized?: boolean | null;
+  transferHook?: boolean | null;
+  defaultFrozen?: boolean | null;
+  nonTransferable?: boolean | null;
   claims: Claims;
 }
 
@@ -306,7 +313,7 @@ function claims(input: RuleInput): DraftFact | null {
           "Burn claim could not be verified.",
         ),
       );
-    } else if (input.burnedPct < BURN_MATCH_PCT) {
+    } else if (input.burnedPct > 0 && input.burnedPct < BURN_MATCH_PCT) {
       parts.push(
         draft(
           "claims_burned",
@@ -315,13 +322,22 @@ function claims(input: RuleInput): DraftFact | null {
           "Burn claim does not match the chain.",
         ),
       );
-    } else {
+    } else if (input.burnedPct >= BURN_MATCH_PCT) {
       parts.push(
         draft(
           "claims_burned",
           "good",
           `The post says tokens were burned, and on-chain data shows about ${pct(input.burnedPct)} burned.`,
           "Burn claim matches the chain.",
+        ),
+      );
+    } else {
+      parts.push(
+        draft(
+          "claims_burned",
+          "unknown",
+          "The post says tokens were burned. That could not be verified on-chain.",
+          "Burn claim could not be verified.",
         ),
       );
     }
@@ -362,7 +378,10 @@ function claims(input: RuleInput): DraftFact | null {
   const short =
     parts.filter((part) => part.signal === "danger").length > 1
       ? "Burn and lock claims do not match the chain."
-      : parts.map((part) => part.short).join(" ");
+      : parts
+          .filter((part) => part.signal === worst.signal)
+          .map((part) => part.short)
+          .join(" ");
   return draft("claims", worst.signal, text, short);
 }
 
@@ -376,7 +395,109 @@ const SOURCE_FOR: Record<string, "dex" | "scan"> = {
   snipers: "scan",
   claims: "scan",
   incomplete: "scan",
+  authority_unread: "scan",
+  permanent_delegate: "scan",
+  transfer_fee: "scan",
+  transfer_hook: "scan",
+  default_frozen: "scan",
+  non_transferable: "scan",
 };
+
+function unreadAuthority(input: RuleInput): DraftFact | null {
+  const mintUnknown = input.mintAuthorityActive == null;
+  const freezeUnknown = input.freezeAuthorityActive == null;
+  if (!mintUnknown && !freezeUnknown) return null;
+  const which =
+    mintUnknown && freezeUnknown
+      ? "Mint authority and freeze authority"
+      : mintUnknown
+        ? "Mint authority"
+        : "Freeze authority";
+  return draft(
+    "authority_unread",
+    "caution",
+    `${which} could not be read, so this is not a clear pass.`,
+    "Authority could not be read.",
+  );
+}
+
+function feeShare(bps: number): string {
+  const value = bps / 100;
+  return Number.isInteger(value) ? `${value}%` : `${value.toFixed(2)}%`;
+}
+
+function tokenTraps(input: RuleInput): DraftFact[] {
+  const facts: DraftFact[] = [];
+  if (input.permanentDelegate === true) {
+    facts.push(
+      draft(
+        "permanent_delegate",
+        "danger",
+        "A permanent delegate can move these tokens without the holder approving.",
+        "Permanent delegate is set.",
+      ),
+    );
+  }
+  if (input.transferFeeBps != null && input.transferFeeBps >= TRANSFER_FEE_DANGER_BPS) {
+    facts.push(
+      draft(
+        "transfer_fee",
+        "danger",
+        `A transfer fee of about ${feeShare(input.transferFeeBps)} is taken on each transfer.`,
+        "High transfer fee.",
+      ),
+    );
+  } else if (input.transferFeeBps != null && input.transferFeeBps > 0) {
+    facts.push(
+      draft(
+        "transfer_fee",
+        "caution",
+        `A transfer fee of about ${feeShare(input.transferFeeBps)} is taken on each transfer.`,
+        "Transfer fee is set.",
+      ),
+    );
+  } else if (input.transferFeeUnsized === true) {
+    facts.push(
+      draft(
+        "transfer_fee",
+        "caution",
+        "A transfer fee was reported, but the size could not be read.",
+        "Transfer fee size unknown.",
+      ),
+    );
+  }
+  if (input.transferHook === true) {
+    facts.push(
+      draft(
+        "transfer_hook",
+        "caution",
+        "A transfer hook program must approve every transfer.",
+        "Transfer hook is set.",
+      ),
+    );
+  }
+  if (input.defaultFrozen === true) {
+    facts.push(
+      draft(
+        "default_frozen",
+        "danger",
+        "New token accounts start frozen.",
+        "Accounts start frozen.",
+      ),
+    );
+  }
+  if (input.nonTransferable === true) {
+    facts.push(
+      draft(
+        "non_transferable",
+        "caution",
+        "This token is marked non-transferable.",
+        "Marked non-transferable.",
+      ),
+    );
+  }
+  return facts;
+}
 
 export function attachSources(facts: Fact[], links: TokenLinks): Fact[] {
   return facts.map((fact) => {
@@ -420,6 +541,12 @@ export function snapshotToRuleInput(snapshot: TokenSnapshot, claimsInput: Claims
     freezeAuthorityActive: snapshot.freezeAuthorityActive,
     sniperPct: snapshot.sniperPct,
     burnedPct: snapshot.burnedPct,
+    permanentDelegate: snapshot.permanentDelegate ?? null,
+    transferFeeBps: snapshot.transferFeeBps ?? null,
+    transferFeeUnsized: snapshot.transferFeeUnsized ?? null,
+    transferHook: snapshot.transferHook ?? null,
+    defaultFrozen: snapshot.defaultFrozen ?? null,
+    nonTransferable: snapshot.nonTransferable ?? null,
     claims: claimsInput,
   };
 }
@@ -434,6 +561,8 @@ export function evaluateRisk(input: RuleInput, links: TokenLinks = emptyLinks(""
     freezeAuthority(input),
     snipers(input),
     claims(input),
+    unreadAuthority(input),
+    ...tokenTraps(input),
   ].filter((item): item is DraftFact => item != null);
 
   let score = 0;
@@ -458,6 +587,13 @@ export function evaluateRisk(input: RuleInput, links: TokenLinks = emptyLinks(""
 
   const incomplete = level === "LOW" && unknownCount >= INCOMPLETE_UNKNOWN_COUNT;
   if (incomplete) level = "MEDIUM";
+  const authorityUnread = input.mintAuthorityActive == null || input.freezeAuthorityActive == null;
+  const hardTrap =
+    input.permanentDelegate === true ||
+    (input.transferFeeBps != null && input.transferFeeBps >= TRANSFER_FEE_DANGER_BPS);
+  if (level === "LOW" && (authorityUnread || hardTrap || input.transferFeeUnsized === true)) {
+    level = "MEDIUM";
+  }
 
   const facts: Fact[] = drafts.map((item) => ({
     ...item,

@@ -1,10 +1,11 @@
+import { SCORECARD_KINDS } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const rt = await getRuntime();
-  const checks = await rt.store.listChecks({ limit: 200 });
+  const checks = await rt.store.listChecks({ limit: 200, kinds: SCORECARD_KINDS });
   return Response.json({
     checks: checks.map((check) => ({
       id: check.id,

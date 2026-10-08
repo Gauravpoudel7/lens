@@ -11,13 +11,28 @@ import bs58 from "bs58";
 import type { LensConfig } from "../types.js";
 import { MEMO_PROGRAM_ID, extractMemoFromLogs, memoFromInstructionData } from "./hash.js";
 
+export interface ProofMemo {
+  payload: string | null;
+  cluster: string;
+  slotTime: string | null;
+  /** Pubkeys that signed the transaction. Empty when the memo is local mock data. */
+  signers: string[];
+}
+
 export interface ProofPublisher {
   publish(payload: string): Promise<{ signature: string; cluster: string }>;
-  readMemo(signature: string): Promise<{
-    payload: string | null;
-    cluster: string;
-    slotTime: string | null;
-  }>;
+  readMemo(signature: string): Promise<ProofMemo>;
+}
+
+export function configuredProofSigner(
+  config: Pick<LensConfig, "proofSigner" | "solanaKeypair" | "solanaKeypairPath">,
+): string | null {
+  if (config.proofSigner) return config.proofSigner;
+  try {
+    return loadKeypairFromConfig(config).publicKey.toBase58();
+  } catch {
+    return null;
+  }
 }
 
 export function loadKeypair(raw: string): Keypair {
@@ -69,13 +84,29 @@ export function createSolanaProofPublisher(
         await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
       }
       if (!tx) {
-        return { payload: null, cluster: config.solanaCluster, slotTime: null };
+        return { payload: null, cluster: config.solanaCluster, slotTime: null, signers: [] };
       }
       const payload = extractMemoFromTransaction(tx);
       const slotTime = tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null;
-      return { payload, cluster: config.solanaCluster, slotTime };
+      return { payload, cluster: config.solanaCluster, slotTime, signers: extractSigners(tx) };
     },
   };
+}
+
+export function extractSigners(tx: {
+  transaction: {
+    message: {
+      header?: { numRequiredSignatures?: number };
+      staticAccountKeys?: Array<{ toBase58(): string } | string>;
+      accountKeys?: Array<{ toBase58(): string } | string>;
+    };
+  };
+}): string[] {
+  const message = tx.transaction.message;
+  const keys = message.staticAccountKeys ?? message.accountKeys ?? [];
+  const count = message.header?.numRequiredSignatures ?? 0;
+  if (count <= 0) return [];
+  return keys.slice(0, count).map((key) => (typeof key === "string" ? key : key.toBase58()));
 }
 
 export function extractMemoFromTransaction(tx: {
