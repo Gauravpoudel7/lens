@@ -1,6 +1,7 @@
 import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { isSolanaAddress } from "../discover.js";
 import { logError } from "../ids.js";
+import { shortMint } from "../reply/policy.js";
 import { SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "../providers/parse.js";
 import type { LensConfig } from "../types.js";
 import type { LensStore } from "../store/types.js";
@@ -107,10 +108,6 @@ function networkName(network: SolanaNetwork): string {
   return "this network";
 }
 
-function shortKey(value: string): string {
-  return `${value.slice(0, 4)}…${value.slice(-4)}`;
-}
-
 function usdc(raw: bigint): string {
   const whole = raw / 10n ** BigInt(USDC_DECIMALS);
   const cents = (raw % 10n ** BigInt(USDC_DECIMALS)) / 10n ** BigInt(USDC_DECIMALS - 2);
@@ -149,7 +146,7 @@ export async function prepareCheckoutTx(
   if (user.wallet !== account) {
     return fail(
       "wrong_wallet",
-      `Connect the wallet you entered (${shortKey(user.wallet)}), or start over with this one.`,
+      `Connect the wallet you entered (${shortMint(user.wallet)}), or start over with this one.`,
     );
   }
 

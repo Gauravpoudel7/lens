@@ -518,11 +518,6 @@ function proofRecord(
 
 const RECENT_MS = 20 * 3_600_000;
 
-export async function postWatchlist(deps: LensDeps, now = new Date()): Promise<number> {
-  const result = await runOutboundCycle(deps, { now, discover: false });
-  return result.posted;
-}
-
 export async function runOutboundCycle(
   deps: LensDeps,
   opts?: { now?: Date; candidates?: TokenCandidate[]; discover?: boolean },

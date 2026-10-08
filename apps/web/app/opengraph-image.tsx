@@ -1,12 +1,15 @@
 import { ImageResponse } from "next/og";
-import { publicConfig } from "@/lib/public-config";
+import { loadConfig } from "@lens/core";
+import { bootstrapEnv } from "@lens/db";
 
 export const alt = "Lens: is this Solana token risky? The answer is stamped on Solana.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function OpenGraphImage() {
-  const { xBotHandle } = await publicConfig();
+export default function OpenGraphImage() {
+  // Built once at build time from env, without opening the database.
+  bootstrapEnv();
+  const { xBotHandle } = loadConfig();
   return new ImageResponse(
     (
       <div
@@ -39,7 +42,7 @@ export default async function OpenGraphImage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "18px", maxWidth: "980px" }}>
           <div style={{ fontSize: "64px", lineHeight: 1.05, letterSpacing: "-0.03em" }}>
-            Is this Solana token risky? Ask @{xBotHandle}.
+            {`Is this Solana token risky? Ask @${xBotHandle}.`}
           </div>
           <div style={{ fontSize: "28px", color: "#c5cfc8" }}>
             Every answer is stamped on Solana and kept on a public record.

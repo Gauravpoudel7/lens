@@ -4,7 +4,6 @@ import { logError, newId } from "../ids.js";
 import type { LensConfig } from "../types.js";
 import type { LensStore } from "../store/types.js";
 import {
-  createCardRail,
   deltaFor,
   newReference,
   paymentSatisfied,
@@ -12,7 +11,6 @@ import {
   usdcRaw,
   type CheckoutSession,
   type PaymentChain,
-  type PaymentRail,
   type ReferencePayment,
 } from "./solana-pay.js";
 
@@ -162,10 +160,6 @@ export function checkoutExpired(payment: Pick<PaymentRecord, "createdAt">, ttlHo
   const created = Date.parse(payment.createdAt);
   const ageMs = Number.isFinite(created) ? now.getTime() - created : 0;
   return ageMs > ttlHours * 60 * 60 * 1000;
-}
-
-export function cardRail(): PaymentRail {
-  return createCardRail();
 }
 
 export function proStatus(user: UserRecord | null, now = new Date()): { tier: "free" | "pro"; proUntil: string | null } {

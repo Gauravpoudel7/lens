@@ -149,6 +149,3 @@ export class MockTokenDataProvider implements TokenDataProvider {
   }
 }
 
-export function fixtureBySymbol(symbol: string): FixtureSpec | undefined {
-  return BY_SYMBOL.get(symbol.toUpperCase());
-}
