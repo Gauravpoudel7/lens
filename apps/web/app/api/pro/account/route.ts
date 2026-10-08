@@ -1,4 +1,4 @@
-import { redactAccount } from "@lens/core";
+import { issueOrReuseLinkCode, redactAccount } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
 import { readWalletProof, walletUnlocks } from "@/lib/wallet-session";
 
@@ -21,13 +21,12 @@ export async function GET(request: Request) {
     expiresAt: url.searchParams.get("expiresAt"),
     signature: url.searchParams.get("signature"),
   });
-  const watches = user && walletUnlocks(user, proof) ? await rt.store.listWatches(user.id) : [];
-  return Response.json(
-    redactAccount({
-      user,
-      watches,
-      queriedHandle: handle,
-      unlocked: walletUnlocks(user, proof),
-    }),
-  );
+  const unlocked = walletUnlocks(user, proof);
+  const watches = user && unlocked ? await rt.store.listWatches(user.id) : [];
+  // The X link code is the key to this plan's X perks, so only a wallet signature unlocks it.
+  const code = user && unlocked ? await issueOrReuseLinkCode(rt.store, user) : null;
+  return Response.json({
+    ...redactAccount({ user, watches, queriedHandle: handle, unlocked }),
+    linkCode: code ? { code: code.code, expiresAt: code.expiresAt } : null,
+  });
 }

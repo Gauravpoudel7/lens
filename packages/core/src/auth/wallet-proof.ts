@@ -98,7 +98,7 @@ export function redactAccount(input: {
   unlocked: boolean;
   now?: Date;
 }): {
-  user: Pick<UserRecord, "xHandle" | "wallet" | "xUserId" | "proUntil"> | null;
+  user: Pick<UserRecord, "xHandle" | "wallet" | "xUserId" | "proUntil" | "xLinkedAt"> | null;
   watches: WatchRecord[];
   tier: "free" | "pro";
   active: boolean;
@@ -129,6 +129,7 @@ export function redactAccount(input: {
       wallet: input.user.wallet,
       xUserId: input.user.xUserId,
       proUntil: input.user.proUntil,
+      xLinkedAt: input.user.xLinkedAt,
     },
     watches: input.watches,
     tier,

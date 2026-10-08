@@ -41,7 +41,6 @@ export function ProPanel({
   usdcMint: string;
   ttlHours: number;
 }) {
-  const [handle, setHandle] = useState("");
   const [wallet, setWallet] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [reference, setReference] = useState("");
@@ -102,7 +101,7 @@ export function ProPanel({
     setNotice(null);
     setDone(null);
     try {
-      const payload = await post("/api/pro/checkout", { xHandle: handle, wallet });
+      const payload = await post("/api/pro/checkout", { wallet });
       const next = payload.session as Session;
       setSession(next);
       setReference(next.reference);
@@ -140,8 +139,8 @@ export function ProPanel({
   }
 
   const accountQuery = new URLSearchParams();
-  if (handle.trim()) accountQuery.set("handle", handle.trim());
-  if (wallet.trim()) accountQuery.set("wallet", wallet.trim());
+  const paidWallet = done?.user?.wallet ?? wallet.trim();
+  if (paidWallet) accountQuery.set("wallet", paidWallet);
   const accountQueryString = accountQuery.toString();
   const accountHref = accountQueryString ? `/account?${accountQueryString}` : "/account";
   const price = formatUsdc(session?.amountUsd ?? priceUsd);
@@ -151,22 +150,10 @@ export function ProPanel({
       {phase === "edit" ? (
         <form onSubmit={onCheckout} className="space-y-4 rounded-2xl border border-line bg-panel p-5">
           <p className="text-sm leading-6 text-muted">
-            Pro is {formatUsdc(priceUsd)} USDC for {periodDays} days. Name the X account that should get the alerts, the
-            wallet that will pay, or both.
+            Pro is {formatUsdc(priceUsd)} USDC for {periodDays} days. Pay from the wallet you will keep. After payment,
+            sign once with that wallet on your account page to get a code, then DM it to @justasklens on X to link your
+            account.
           </p>
-          <div>
-            <label className="text-sm text-muted" htmlFor="x-handle">
-              X handle
-            </label>
-            <Input
-              id="x-handle"
-              className="mt-2"
-              value={handle}
-              onChange={(event) => setHandle(event.target.value)}
-              placeholder="@yourhandle"
-              autoComplete="off"
-            />
-          </div>
           <div>
             <label className="text-sm text-muted" htmlFor="wallet">
               Wallet
@@ -182,7 +169,7 @@ export function ProPanel({
           </div>
           <p className="text-sm leading-6 text-faint">
             USDC mint <span className="break-all font-mono text-muted">{usdcMint}</span>. There is no password. The
-            handle and wallet are how Lens finds the plan later.
+            wallet is how Lens finds the plan.
           </p>
           {!treasurySet ? (
             <Notice tone="bad" title="Payments are not open">
@@ -194,7 +181,7 @@ export function ProPanel({
               The Pro price has to be greater than zero before a payment link can be created.
             </Notice>
           ) : null}
-          <Button type="submit" disabled={pending !== null || !treasurySet || priceUsd <= 0}>
+          <Button type="submit" disabled={pending !== null || !treasurySet || priceUsd <= 0 || !wallet.trim()}>
             {pending === "checkout" ? "Creating the link…" : "Create Solana Pay link"}
           </Button>
           <div>
@@ -300,8 +287,12 @@ export function ProPanel({
             {done.proUntil ? ` until ${formatTime(done.proUntil)}` : ""}.
           </p>
           {done.signature ? <p className="break-all font-mono text-xs text-muted">{done.signature}</p> : null}
+          <p className="text-sm leading-6 text-ink">
+            Next, link your X account. Sign with the paying wallet on your account page to get a one-time code, then DM it
+            to @justasklens. The code is shown only after that signature.
+          </p>
           <Button asChild>
-            <Link href={accountHref}>Open account</Link>
+            <Link href={accountHref}>Get my X link code</Link>
           </Button>
         </section>
       ) : null}

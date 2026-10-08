@@ -241,6 +241,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `SHARP_DROP_PCT` | `-30` | HIGH is right if price change is at or below this |
 | `CALL_WIN_PCT` | `20` | A call wins at or above this |
 | `POLL_INTERVAL_MS` | `180000` | Worker poll (mentions, outbound, scoring). 180 seconds by default to save X credits |
+| `X_DM_POLL_MS` | `180000` | Minimum gap between DM reads for Pro link codes. Values below 180000 are raised to 180000. DMs are read only while a paid account has an open code |
 | `RPC_RETRY_ATTEMPTS` | `4` | Retries for HTTP 429 and dropped RPC calls |
 | `OUTBOUND_ENABLED` | `false` | Scheduled calls and warnings |
 | `OUTBOUND_MINTS` | empty | Comma-separated mints to always consider |
@@ -302,7 +303,7 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 ## HTTP API
 
 - `POST /api/check` `{ "input": "<mint, ticker, or post text>", "wallet"?: "<pro wallet>" }`
-- `POST /api/pro/checkout` `{ "xHandle"?, "wallet"? }` returns a Solana Pay URL
+- `POST /api/pro/checkout` `{ "wallet" }` returns a Solana Pay URL. A handle is refused; X is linked by DM code after payment
 - `POST /api/pro/confirm` `{ "reference" }` checks the USDC transfer and flips Pro
 - `GET /api/pro/account?handle=&wallet=` returns only whether that handle is Pro, unless the query also has a wallet signature (`proofWallet`, `nonce`, `expiresAt`, `signature`) from `POST /api/pro/nonce`
 - `POST /api/pro/watch` and `DELETE` need that same signature, and the account has to be Pro for both
@@ -322,11 +323,13 @@ How to obtain each key is in [docs/KEYS.md](docs/KEYS.md). How to run the Docker
 
 ## Pro
 
-Free X accounts get `RATE_LIMIT_PER_USER_PER_DAY` replies (default 5). An account is Pro after a USDC transfer to `PRO_TREASURY_WALLET` includes that checkout's Solana Pay reference and at least the configured amount. Pro mentions skip the daily cap. Pro watchlist members get a DM when a checked mint is HIGH. The DM points at the report that was already proved. The risk engine does not look at who paid.
+Free X accounts get `RATE_LIMIT_PER_USER_PER_DAY` replies (default 5). An account is Pro after a USDC transfer to `PRO_TREASURY_WALLET` includes that checkout's Solana Pay reference and at least the configured amount. Pro mentions from a linked X account skip the daily cap. Linked Pro watchlist members get a DM when a checked mint is HIGH. The DM points at the report that was already proved. The risk engine does not look at who paid.
 
 The Pro page reads `PRO_PRICE_USDC` (default 10 when unset), `PRO_PERIOD_DAYS` (default 30), and `RATE_LIMIT_PER_USER_PER_DAY`. An unpaid checkout older than `PRO_CHECKOUT_TTL_HOURS` (default 24) is reported as expired. A transfer that includes the reference but sends less than the price is reported as the wrong amount. A reference Lens never issued is reported as not found. A full transfer still confirms after the window. `/account` looks up the plan by X handle or wallet. There is no password. Lens does not hold the USDC.
 
 The public check form, `/api/verify`, and the Blink trade route share an hourly limit of `CHECK_API_LIMIT_PER_HOUR` (default 30), counted separately. The key is Railway’s `X-Real-IP` header, which the public edge overwrites, so a caller cannot pick their own address. `X-Forwarded-For` is ignored. With no `X-Real-IP` (local `npm run dev`) everyone shares one bucket. The counters live in memory, capped at 5,000 keys, and reset with the process. A wallet on the form does not skip the limit. The X cap uses the author of the mention. Checkout will not attach a new wallet or handle to an account that already exists. One transaction signature can pay only one checkout. Renewing early adds the period onto the current end date.
+
+Pro is bought by wallet. `POST /api/pro/checkout` takes `{ "wallet" }` only and refuses a handle. After the transfer confirms, the wallet owner signs once on `/account` and sees a one-time code (`LENS-XXXX-XXXX`, 24 hours). The code is never returned without that signature, because the Solana Pay reference is public on-chain and anyone can call confirm. The owner DMs the code to the bot. The worker reads DMs (`GET /2/dm_events`) only while some paid account has an open code, and at most every `X_DM_POLL_MS` (default and minimum 180000). A valid code links the sending X user id and handle to the paid account and the bot replies once: “Linked. Lens Pro is on for @handle.” Wrong, expired, and already-used codes get a short reply; after 5 failures in a UTC day an X account's DMs are ignored. A code from an X account or handle that already belongs to another wallet is refused. An older wallet-less record for the same handle is folded into the paid account. Nothing else links a handle: mentions never attach an X id, and Pro perks (no daily cap, warning DMs) need that DM link.
 
 `/account` shows whether a handle is Pro to anyone. Wallet, X id, expiry, and the watchlist need a signed message from that wallet (`Lens account proof`, nonce, expiry). The same signature is required to add or remove a watch. Warning DMs are limited to one per watcher per mint per UTC day, 10 per watcher per day, and 100 for the bot per day.
 

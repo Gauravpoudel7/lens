@@ -39,5 +39,6 @@ export * from "./reply/sanitize.js";
 export * from "./billing/solana-pay.js";
 export * from "./billing/chain.js";
 export * from "./billing/service.js";
+export * from "./billing/link.js";
 export * from "./alerts.js";
 export * from "./discover.js";

@@ -1,4 +1,4 @@
-import { isActivePro } from "./accounts.js";
+import { isLinkedPro } from "./accounts.js";
 import { queueWarningAlerts } from "./alerts.js";
 import { claimsFromPosts } from "./claims.js";
 import { listDexCandidates, type TokenCandidate } from "./discover.js";
@@ -93,8 +93,7 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
   }
 
   try {
-    await linkMentionAuthor(deps, incoming.authorId, incoming.authorUsername);
-    const pro = await authorIsPro(deps, incoming.authorId, incoming.authorUsername);
+    const pro = await authorIsPro(deps, incoming.authorId);
     if (!pro) {
       const day = utcDay(new Date());
       const used = await deps.store.getDailyCount(incoming.authorId, day);
@@ -237,7 +236,7 @@ async function finishReply(
     });
     if (!cached) await deps.store.updateCheck(check.id, { xPostId: posted.id });
     await deps.store.updateMention(incoming.id, { status: "replied", checkId: check.id });
-    if (!(await authorIsPro(deps, incoming.authorId, incoming.authorUsername))) {
+    if (!(await authorIsPro(deps, incoming.authorId))) {
       await deps.store.incrementDailyCount(incoming.authorId, utcDay(new Date()));
     }
     await deps.store.incrementDailyCount(X_REPLY_COUNTER_ID, utcDay(new Date()));
@@ -591,21 +590,9 @@ export async function runOutboundCycle(
   return { posted, skipped, considered };
 }
 
-async function authorIsPro(deps: LensDeps, authorId: string, authorUsername: string): Promise<boolean> {
-  const byId = await deps.store.findUser({ xUserId: authorId });
-  const user = byId ?? (await deps.store.findUser({ xHandle: authorUsername }));
-  return isActivePro(user);
-}
-
-async function linkMentionAuthor(deps: LensDeps, authorId: string, authorUsername: string): Promise<void> {
-  const existing = await deps.store.findUser({ xHandle: authorUsername });
-  if (!existing) return;
-  if (existing.xUserId === authorId) return;
-  await deps.store.upsertUser({
-    xHandle: existing.xHandle,
-    xUserId: authorId,
-    wallet: existing.wallet,
-  });
+/** Pro perks on X need an account linked by DM code to this exact X user id. Handles never count. */
+async function authorIsPro(deps: LensDeps, authorId: string): Promise<boolean> {
+  return isLinkedPro(await deps.store.findUser({ xUserId: authorId }));
 }
 
 export { levelSummary };

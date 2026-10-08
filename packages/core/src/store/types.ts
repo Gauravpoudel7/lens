@@ -1,4 +1,4 @@
-import type { AlertRecord, PaymentRecord, UserRecord, WatchRecord } from "../accounts.js";
+import type { AlertRecord, LinkCodeRecord, PaymentRecord, UserRecord, WatchRecord } from "../accounts.js";
 import type { CheckRecord, MentionRecord, OutcomeRecord } from "../types.js";
 
 export interface LensStore {
@@ -54,6 +54,25 @@ export interface LensStore {
   }): Promise<UserRecord | null>;
   getUser(id: string): Promise<UserRecord | null>;
   setProUntil(userId: string, proUntilIso: string): Promise<UserRecord>;
+
+  saveLinkCode(code: LinkCodeRecord): Promise<void>;
+  getLinkCode(code: string): Promise<LinkCodeRecord | null>;
+  /** Newest unused, unexpired code for this account. */
+  activeLinkCode(userId: string, now: Date): Promise<LinkCodeRecord | null>;
+  /** Oldest unused, unexpired code across all accounts, or null. Gates DM polling. */
+  oldestOpenLinkCode(now: Date): Promise<LinkCodeRecord | null>;
+  /**
+   * Atomically: mark the code used by `xUserId`, optionally fold `absorbUserId` (a wallet-less account
+   * holding this handle) into `userId`, then set xUserId, xHandle and xLinkedAt on `userId`.
+   */
+  linkXAccount(input: {
+    userId: string;
+    xUserId: string;
+    xHandle: string;
+    code: string;
+    now: Date;
+    absorbUserId?: string | null;
+  }): Promise<UserRecord>;
 
   listWatches(userId: string): Promise<WatchRecord[]>;
   addWatch(userId: string, mint: string, symbol: string): Promise<WatchRecord>;

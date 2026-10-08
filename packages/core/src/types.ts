@@ -183,6 +183,8 @@ export interface LensConfig {
   sharpDropPct: number;
   callWinPct: number;
   pollIntervalMs: number;
+  /** Minimum gap between DM reads for link codes. Floor 180000. */
+  xDmPollMs: number;
   jupiterFeeBps: number;
   jupiterFeeAccount?: string;
   jupiterApiKey?: string;

@@ -7,6 +7,16 @@ import { createReplyWriter } from "./reply/writer.js";
 import { MemoryStore } from "./store/memory.js";
 import { MockXClient } from "./x/mock.js";
 import { queueWarningAlerts, warningAlertText } from "./alerts.js";
+import { issueOrReuseLinkCode } from "./billing/link.js";
+/** A paid wallet account whose X account was linked the only allowed way: a redeemed link code. */
+async function linkedPro(store: MemoryStore, xUserId: string, xHandle: string, wallet: string) {
+  const created = await store.upsertUser({ wallet });
+  const pro = await store.setProUntil(created.id, "2099-01-01T00:00:00.000Z");
+  const code = await issueOrReuseLinkCode(store, pro);
+  if (!code) throw new Error("no code");
+  return store.linkXAccount({ userId: pro.id, xUserId, xHandle, code: code.code, now: new Date() });
+}
+
 
 function deps(): LensDeps & { x: MockXClient; store: MemoryStore } {
   const store = new MemoryStore();
@@ -28,10 +38,9 @@ function deps(): LensDeps & { x: MockXClient; store: MemoryStore } {
 }
 
 describe("warning DMs", () => {
-  it("DMs a Pro watcher and skips a free watcher", async () => {
+  it("DMs a linked Pro watcher and skips a free watcher", async () => {
     const rt = deps();
-    const pro = await rt.store.upsertUser({ xHandle: "pro_user", xUserId: "111", wallet: "w1" });
-    await rt.store.setProUntil(pro.id, "2099-01-01T00:00:00.000Z");
+    const pro = await linkedPro(rt.store, "111", "pro_user", "w1");
     await rt.store.addWatch(pro.id, FIXTURES.danger.mint, "DANGER");
     const free = await rt.store.upsertUser({ xHandle: "free_user", xUserId: "222" });
     await rt.store.addWatch(free.id, FIXTURES.danger.mint, "DANGER");
@@ -52,6 +61,17 @@ describe("warning DMs", () => {
     expect(rt.x.dms[0]?.text.endsWith("Not financial advice.")).toBe(true);
   });
 
+  it("queues the DM for a Pro watcher who has not linked X by DM code, even with a known X id", async () => {
+    const rt = deps();
+    const pro = await rt.store.upsertUser({ xHandle: "pro_user", xUserId: "111", wallet: "w1" });
+    await rt.store.setProUntil(pro.id, "2099-01-01T00:00:00.000Z");
+    await rt.store.addWatch(pro.id, FIXTURES.danger.mint, "DANGER");
+    const posted = await publishOutbound(rt, FIXTURES.danger.mint);
+    expect(posted.ok).toBe(true);
+    expect(rt.x.dms).toHaveLength(0);
+    expect(await rt.store.listAlertsByStatus("queued")).toHaveLength(1);
+  });
+
   it("queues the DM until an X user id is known", async () => {
     const rt = deps();
     const pro = await rt.store.upsertUser({ xHandle: "pro_user", wallet: "w1" });
@@ -66,8 +86,7 @@ describe("warning DMs", () => {
 
   it("sends one warning DM per watcher per mint per day", async () => {
     const rt = deps();
-    const pro = await rt.store.upsertUser({ xHandle: "pro_user", xUserId: "111", wallet: "w1" });
-    await rt.store.setProUntil(pro.id, "2099-01-01T00:00:00.000Z");
+    const pro = await linkedPro(rt.store, "111", "pro_user", "w1");
     await rt.store.addWatch(pro.id, FIXTURES.danger.mint, "DANGER");
     const posted = await publishOutbound(rt, FIXTURES.danger.mint);
     expect(posted.ok).toBe(true);

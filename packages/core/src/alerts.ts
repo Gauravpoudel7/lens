@@ -1,4 +1,4 @@
-import { isActivePro } from "./accounts.js";
+import { isLinkedPro } from "./accounts.js";
 import { errorMessage, log, newId } from "./ids.js";
 import type { LensDeps } from "./pipeline.js";
 import { publicSiteLabel, shortMint } from "./reply/policy.js";
@@ -57,7 +57,8 @@ export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Pr
         deps.config.xReplyLinks,
         publicSiteLabel(deps.config),
       );
-      if (!user.xUserId) {
+      // DMs go only to X accounts linked by DM code (they messaged us first). Others wait in the queue.
+      if (!user.xUserId || !user.xLinkedAt) {
         await deps.store.saveAlert({
           id: newId(),
           userId: user.id,
@@ -91,7 +92,7 @@ export async function flushQueuedAlerts(deps: LensDeps): Promise<number> {
   let sent = 0;
   for (const alert of queued) {
     const user = await deps.store.getUser(alert.userId);
-    if (!user?.xUserId || !isActivePro(user)) continue;
+    if (!user?.xUserId || !isLinkedPro(user)) continue;
     try {
       const dm = await deps.x.sendDm({ recipientId: user.xUserId, text: alert.text });
       await deps.store.updateAlert(alert.id, { status: "sent", xMessageId: dm.id });

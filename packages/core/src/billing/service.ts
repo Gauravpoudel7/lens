@@ -39,19 +39,20 @@ export interface BillingDeps {
   chain: PaymentChain;
 }
 
+/**
+ * Pro is bought by wallet. An X account is linked afterwards, only by DMing the code the wallet owner
+ * sees on /account, so checkout never attaches a handle or wallet to someone else's record.
+ */
 export async function startUsdcCheckout(
   deps: BillingDeps,
-  input: { xHandle?: string | null; wallet?: string | null },
+  input: { wallet?: string | null; xHandle?: string | null },
 ): Promise<{ ok: true; session: CheckoutSession; user: UserRecord } | { ok: false; error: string }> {
-  const handle = (input.xHandle?.trim() ?? "").replace(/^@+/, "");
   const wallet = input.wallet?.trim() ?? "";
-  if (!handle && !wallet) {
-    return { ok: false, error: "Add an X handle, a wallet, or both." };
+  if (input.xHandle?.trim()) {
+    return { ok: false, error: "Pro is bought by wallet. Link your X account after payment." };
   }
-  if (handle && !/^[A-Za-z0-9_]{1,15}$/.test(handle)) {
-    return { ok: false, error: "That X handle is not valid." };
-  }
-  if (wallet && !isSolanaAddress(wallet)) {
+  if (!wallet) return { ok: false, error: "Add the wallet you will pay from." };
+  if (!isSolanaAddress(wallet)) {
     return { ok: false, error: "That wallet address is not valid." };
   }
   if (!deps.config.proTreasury) {
@@ -60,9 +61,7 @@ export async function startUsdcCheckout(
   if (deps.config.proPriceUsdc <= 0) {
     return { ok: false, error: "PRO_PRICE_USDC must be greater than zero." };
   }
-  const bound = await checkoutUser(deps.store, handle, wallet);
-  if (!bound.ok) return bound;
-  const user = bound.user;
+  const user = (await deps.store.findUser({ wallet })) ?? (await deps.store.upsertUser({ wallet }));
   const reference = newReference();
   const amountRaw = usdcRaw(deps.config.proPriceUsdc).toString();
   const payment: PaymentRecord = {
@@ -95,36 +94,6 @@ export async function startUsdcCheckout(
     }),
   };
   return { ok: true, session, user };
-}
-
-async function checkoutUser(
-  store: LensStore,
-  handle: string,
-  wallet: string,
-): Promise<{ ok: true; user: UserRecord } | { ok: false; error: string }> {
-  const byHandle = handle ? await store.findUser({ xHandle: handle }) : null;
-  const byWallet = wallet ? await store.findUser({ wallet }) : null;
-  if (byHandle && byWallet && byHandle.id !== byWallet.id) {
-    return { ok: false, error: "That handle and wallet belong to different accounts." };
-  }
-  const existing = byHandle ?? byWallet;
-  if (!existing) {
-    const user = await store.upsertUser({ xHandle: handle || null, wallet: wallet || null });
-    return { ok: true, user };
-  }
-  if (wallet && existing.wallet && existing.wallet !== wallet) {
-    return { ok: false, error: "That account is already tied to another wallet." };
-  }
-  if (handle && existing.xHandle && existing.xHandle !== handle.toLowerCase()) {
-    return { ok: false, error: "That wallet is already tied to another account." };
-  }
-  if (wallet && !existing.wallet) {
-    return { ok: false, error: "Checkout cannot attach a wallet to an existing account." };
-  }
-  if (handle && !existing.xHandle) {
-    return { ok: false, error: "Checkout cannot attach a handle to an existing account." };
-  }
-  return { ok: true, user: existing };
 }
 
 function fail(

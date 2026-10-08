@@ -22,6 +22,7 @@ function user(partial: Partial<UserRecord> = {}): UserRecord {
     wallet: "wallet",
     tier: "pro",
     proUntil: "2099-01-01T00:00:00.000Z",
+    xLinkedAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     ...partial,
   };

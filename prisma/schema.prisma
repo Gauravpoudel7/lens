@@ -128,12 +128,27 @@ model Account {
   wallet    String?   @unique
   tier      String    @default("free")
   proUntil  DateTime?
+  /// Set only when this X account DMed a valid link code to the bot.
+  xLinkedAt DateTime?
   createdAt DateTime  @default(now())
   watches   Watch[]
   payments  Payment[]
   alerts    Alert[]
+  linkCodes LinkCode[]
 
   @@map("accounts")
+}
+
+model LinkCode {
+  code          String    @id
+  userId        String
+  user          Account   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  usedAt        DateTime?
+  usedByXUserId String?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Watch {

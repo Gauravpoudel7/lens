@@ -5,7 +5,9 @@ import {
   log,
   resolveBotUserId,
   type LensStore,
+  compareIds,
   type XClient,
+  type XDm,
   type XPost,
 } from "@lens/core";
 import { createPersistedOAuth2TokenStore } from "@lens/db";
@@ -148,6 +150,33 @@ function methods(input: {
     async post(text) {
       const result = await call((client) => client.v2.tweet(text));
       return { id: result.data.id };
+    },
+    async listDms(sinceId) {
+      // GET /2/dm_events needs dm.read. One page of the newest events is enough at a 3-minute poll.
+      return call(async (client) => {
+        const page = await client.v2.listDmEvents({
+          event_types: "MessageCreate",
+          "dm_event.fields": ["id", "text", "event_type", "created_at", "sender_id"],
+          expansions: ["sender_id"],
+          "user.fields": ["username"],
+          max_results: 50,
+        });
+        const users = new Map((page.includes?.users ?? []).map((user) => [user.id, user.username]));
+        const dms: XDm[] = [];
+        for (const event of page.events) {
+          if (event.event_type !== "MessageCreate" || !event.sender_id) continue;
+          if (event.sender_id === input.botUserId) continue;
+          if (sinceId && compareIds(event.id, sinceId) <= 0) continue;
+          dms.push({
+            id: event.id,
+            senderId: event.sender_id,
+            senderUsername: users.get(event.sender_id) ?? "",
+            text: event.text,
+            createdAt: event.created_at ?? new Date().toISOString(),
+          });
+        }
+        return dms.sort((a, b) => compareIds(a.id, b.id));
+      });
     },
     async sendDm({ recipientId, text }) {
       const result = await call((client) => client.v2.sendDmToParticipant(recipientId, { text }));

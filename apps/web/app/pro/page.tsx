@@ -113,13 +113,18 @@ export default async function ProPage() {
             payment is rejected. A reference Lens never issued is reported as not found. A full transfer still confirms
             after the window.
           </li>
+          <li>
+            <span className="font-semibold text-ink">4. You link X by DM.</span> Sign once with the paying wallet on your
+            account page to see a one-time code. DM that code to @justasklens from the X account that should get Pro. It
+            expires after 24 hours. Pro perks on X start only after this step.
+          </li>
         </ol>
         <p className="mt-4 text-sm leading-6 text-faint">
           Card checkout is not turned on. There is no password.{" "}
           <Link href="/account" className="text-accent-text hover:text-ink">
             Open an account
           </Link>{" "}
-          with the X handle or the wallet that paid.
+          with the wallet that paid.
         </p>
       </section>
 

@@ -5,6 +5,7 @@ import {
   type CheckRecord,
   type Fact,
   type LensStore,
+  type LinkCodeRecord,
   type MentionRecord,
   type OutcomeRecord,
   type PaymentRecord,
@@ -379,6 +380,73 @@ export function createPrismaStore(): LensStore {
       });
       return toUser(row);
     },
+    async saveLinkCode(code) {
+      await prisma.linkCode.create({
+        data: {
+          code: code.code,
+          userId: code.userId,
+          expiresAt: new Date(code.expiresAt),
+          usedAt: code.usedAt ? new Date(code.usedAt) : null,
+          usedByXUserId: code.usedByXUserId,
+          createdAt: new Date(code.createdAt),
+        },
+      });
+    },
+    async getLinkCode(code) {
+      const row = await prisma.linkCode.findUnique({ where: { code } });
+      return row ? toLinkCode(row) : null;
+    },
+    async activeLinkCode(userId, now) {
+      const row = await prisma.linkCode.findFirst({
+        where: { userId, usedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: "desc" },
+      });
+      return row ? toLinkCode(row) : null;
+    },
+    async oldestOpenLinkCode(now) {
+      const row = await prisma.linkCode.findFirst({
+        where: { usedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: "asc" },
+      });
+      return row ? toLinkCode(row) : null;
+    },
+    async linkXAccount(input) {
+      const row = await prisma.$transaction(async (tx) => {
+        const target = await tx.account.findUniqueOrThrow({ where: { id: input.userId } });
+        let proUntil = target.proUntil;
+        if (input.absorbUserId && input.absorbUserId !== input.userId) {
+          const absorbed = await tx.account.findUnique({ where: { id: input.absorbUserId } });
+          if (absorbed) {
+            const have = new Set((await tx.watch.findMany({ where: { userId: target.id } })).map((w) => w.mint));
+            await tx.watch.deleteMany({ where: { userId: absorbed.id, mint: { in: [...have] } } });
+            await tx.watch.updateMany({ where: { userId: absorbed.id }, data: { userId: target.id } });
+            await tx.payment.updateMany({ where: { userId: absorbed.id }, data: { userId: target.id } });
+            const seen = new Set((await tx.alert.findMany({ where: { userId: target.id } })).map((a) => a.checkId));
+            await tx.alert.deleteMany({ where: { userId: absorbed.id, checkId: { in: [...seen] } } });
+            await tx.alert.updateMany({ where: { userId: absorbed.id }, data: { userId: target.id } });
+            await tx.linkCode.updateMany({ where: { userId: absorbed.id }, data: { userId: target.id } });
+            if (absorbed.proUntil && (!proUntil || absorbed.proUntil > proUntil)) proUntil = absorbed.proUntil;
+            // Free the unique handle and X id before the target takes them.
+            await tx.account.delete({ where: { id: absorbed.id } });
+          }
+        }
+        await tx.linkCode.update({
+          where: { code: input.code },
+          data: { usedAt: input.now, usedByXUserId: input.xUserId },
+        });
+        return tx.account.update({
+          where: { id: target.id },
+          data: {
+            xUserId: input.xUserId,
+            xHandle: normalizeHandle(input.xHandle),
+            xLinkedAt: input.now,
+            proUntil,
+            ...(proUntil && proUntil !== target.proUntil ? { tier: "pro" } : {}),
+          },
+        });
+      });
+      return toUser(row);
+    },
     async listWatches(userId) {
       const rows = await prisma.watch.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
       return rows.map(toWatch);
@@ -483,6 +551,7 @@ function toUser(row: {
   wallet: string | null;
   tier: string;
   proUntil: Date | null;
+  xLinkedAt: Date | null;
   createdAt: Date;
 }): UserRecord {
   return {
@@ -492,6 +561,25 @@ function toUser(row: {
     wallet: row.wallet,
     tier: row.tier === "pro" ? "pro" : "free",
     proUntil: row.proUntil ? row.proUntil.toISOString() : null,
+    xLinkedAt: row.xLinkedAt ? row.xLinkedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function toLinkCode(row: {
+  code: string;
+  userId: string;
+  expiresAt: Date;
+  usedAt: Date | null;
+  usedByXUserId: string | null;
+  createdAt: Date;
+}): LinkCodeRecord {
+  return {
+    code: row.code,
+    userId: row.userId,
+    expiresAt: row.expiresAt.toISOString(),
+    usedAt: row.usedAt ? row.usedAt.toISOString() : null,
+    usedByXUserId: row.usedByXUserId,
     createdAt: row.createdAt.toISOString(),
   };
 }

@@ -1,5 +1,5 @@
 import { newId } from "../ids.js";
-import { isActivePro, normalizeHandle, type AlertRecord, type PaymentRecord, type UserRecord, type WatchRecord } from "../accounts.js";
+import { isActivePro, normalizeHandle, type AlertRecord, type LinkCodeRecord, type PaymentRecord, type UserRecord, type WatchRecord } from "../accounts.js";
 import type { CheckRecord, MentionRecord, OutcomeRecord } from "../types.js";
 import type { LensStore } from "./types.js";
 
@@ -19,6 +19,7 @@ export class MemoryStore implements LensStore {
   payments = new Map<string, PaymentRecord>();
   alerts = new Map<string, AlertRecord>();
   outbound = new Map<string, number>();
+  linkCodes = new Map<string, LinkCodeRecord>();
 
   async getMention(id: string): Promise<MentionRecord | null> {
     const mention = this.mentions.get(id);
@@ -195,6 +196,7 @@ export class MemoryStore implements LensStore {
           wallet,
           tier: "free",
           proUntil: null,
+          xLinkedAt: null,
           createdAt: new Date().toISOString(),
         };
     this.users.set(next.id, next);
@@ -226,6 +228,80 @@ export class MemoryStore implements LensStore {
     if (!current) throw new Error(`Unknown user ${userId}`);
     const next = { ...current, tier: "pro" as const, proUntil: proUntilIso };
     this.users.set(userId, next);
+    return clone(next);
+  }
+
+  async saveLinkCode(code: LinkCodeRecord): Promise<void> {
+    this.linkCodes.set(code.code, clone(code));
+  }
+
+  async getLinkCode(code: string): Promise<LinkCodeRecord | null> {
+    const found = this.linkCodes.get(code);
+    return found ? clone(found) : null;
+  }
+
+  async activeLinkCode(userId: string, now: Date): Promise<LinkCodeRecord | null> {
+    const open = [...this.linkCodes.values()]
+      .filter((row) => row.userId === userId && !row.usedAt && Date.parse(row.expiresAt) > now.getTime())
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return open[0] ? clone(open[0]) : null;
+  }
+
+  async oldestOpenLinkCode(now: Date): Promise<LinkCodeRecord | null> {
+    const open = [...this.linkCodes.values()]
+      .filter((row) => !row.usedAt && Date.parse(row.expiresAt) > now.getTime())
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return open[0] ? clone(open[0]) : null;
+  }
+
+  async linkXAccount(input: {
+    userId: string;
+    xUserId: string;
+    xHandle: string;
+    code: string;
+    now: Date;
+    absorbUserId?: string | null;
+  }): Promise<UserRecord> {
+    const target = this.users.get(input.userId);
+    const code = this.linkCodes.get(input.code);
+    if (!target || !code) throw new Error("link target missing");
+    let proUntil = target.proUntil;
+    if (input.absorbUserId && input.absorbUserId !== input.userId) {
+      const absorbed = this.users.get(input.absorbUserId);
+      if (absorbed) {
+        const mints = new Set([...this.watches.values()].filter((w) => w.userId === target.id).map((w) => w.mint));
+        for (const [id, watch] of this.watches) {
+          if (watch.userId !== absorbed.id) continue;
+          if (mints.has(watch.mint)) this.watches.delete(id);
+          else this.watches.set(id, { ...watch, userId: target.id });
+        }
+        for (const [id, payment] of this.payments) {
+          if (payment.userId === absorbed.id) this.payments.set(id, { ...payment, userId: target.id });
+        }
+        const checks = new Set([...this.alerts.values()].filter((a) => a.userId === target.id).map((a) => a.checkId));
+        for (const [id, alert] of this.alerts) {
+          if (alert.userId !== absorbed.id) continue;
+          if (checks.has(alert.checkId)) this.alerts.delete(id);
+          else this.alerts.set(id, { ...alert, userId: target.id });
+        }
+        for (const [key, row] of this.linkCodes) {
+          if (row.userId === absorbed.id) this.linkCodes.set(key, { ...row, userId: target.id });
+        }
+        if (absorbed.proUntil && (!proUntil || absorbed.proUntil > proUntil)) proUntil = absorbed.proUntil;
+        this.users.delete(absorbed.id);
+      }
+    }
+    const nowIso = input.now.toISOString();
+    this.linkCodes.set(input.code, { ...code, usedAt: nowIso, usedByXUserId: input.xUserId });
+    const next: UserRecord = {
+      ...target,
+      xUserId: input.xUserId,
+      xHandle: normalizeHandle(input.xHandle),
+      xLinkedAt: nowIso,
+      proUntil,
+      tier: proUntil !== target.proUntil ? "pro" : target.tier,
+    };
+    this.users.set(next.id, next);
     return clone(next);
   }
 

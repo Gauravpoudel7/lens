@@ -68,6 +68,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     sharpDropPct: num(env.SHARP_DROP_PCT, -30),
     callWinPct: num(env.CALL_WIN_PCT, 20),
     pollIntervalMs: num(env.POLL_INTERVAL_MS, 180_000),
+    // DM reads cost API credits; never more often than every 3 minutes.
+    xDmPollMs: Math.max(180_000, num(env.X_DM_POLL_MS, 180_000)),
     jupiterFeeBps: num(env.JUPITER_FEE_BPS, 50),
     jupiterFeeAccount: clean(env.JUPITER_FEE_ACCOUNT),
     jupiterApiKey: clean(env.JUPITER_API_KEY),

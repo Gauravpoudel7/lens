@@ -148,6 +148,8 @@ Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUnti
 
 `MAX_X_REPLIES_PER_DAY` (default 50) is a separate counter for the bot, stored as a `UsageDay` row with id `lens:x_replies`. When it is reached, the worker does not prove or reply. Pro does not bypass it. Outbound posts still use `OUTBOUND_DAILY_CAP`.
 
+Pro checkout is by wallet only (`startUsdcCheckout`). X linking lives in `packages/core/src/billing/link.ts`: `issueOrReuseLinkCode` (only for active, unlinked Pro, only behind a wallet signature on `/api/pro/account`), `redeemLinkCode` (one DM), and `pollDmLinks` in `poll.ts` (gated on an open code and `X_DM_POLL_MS`). `store.linkXAccount` marks the code used and sets `xUserId`, `xHandle`, `xLinkedAt` in one transaction, folding in an older wallet-less account for the same handle. `isLinkedPro` is the only Pro check on X: mention cap bypass and warning DMs both need `xLinkedAt`.
+
 `confirmUsdcCheckout` reports `not_found` when the reference was never issued, `wrong_amount` when a transfer includes the reference but the USDC received is short, and `expired` when an unpaid checkout is older than `PRO_CHECKOUT_TTL_HOURS` (default 24). A full transfer still confirms after that window. The web app shows those reasons. It does not mark Pro from the form alone.
 
 `npm run doctor` prints a ready / not-ready list and does not post. `npm run doctor -- --x` adds one `GET /2/users/me`. That flag does not refresh OAuth tokens.

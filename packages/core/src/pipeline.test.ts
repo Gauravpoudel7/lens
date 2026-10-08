@@ -11,6 +11,7 @@ import { MemoryStore } from "./store/memory.js";
 import { X_REPLY_COUNTER_ID, createRiskCheck, processMention, publishOutbound, type LensDeps } from "./pipeline.js";
 import { scoreDueChecks } from "./outcomes.js";
 import { MockXClient } from "./x/mock.js";
+import { issueOrReuseLinkCode } from "./billing/link.js";
 import type { XPost } from "./x/types.js";
 
 function deps(
@@ -51,6 +52,15 @@ function parent(): XPost {
     parentId: null,
     createdAt: "2026-09-29T12:00:00.000Z",
   };
+}
+
+/** A paid wallet account whose X account was linked the only allowed way: a redeemed link code. */
+async function linkedPro(store: MemoryStore, xUserId: string, xHandle: string, wallet: string) {
+  const created = await store.upsertUser({ wallet });
+  const pro = await store.setProUntil(created.id, "2099-01-01T00:00:00.000Z");
+  const code = await issueOrReuseLinkCode(store, pro);
+  if (!code) throw new Error("no code");
+  return store.linkXAccount({ userId: pro.id, xUserId, xHandle, code: code.code, now: new Date() });
 }
 
 describe("mention pipeline", () => {
@@ -198,10 +208,21 @@ describe("mention pipeline", () => {
     expect(mention?.skipReason).toBe("bot daily reply cap");
   });
 
-  it("lets a Pro account keep asking after the free daily cap", async () => {
-    const { rt, x } = deps(1);
+  it("does not give Pro perks to a handle that was never linked by DM code", async () => {
+    const { rt, store } = deps(1);
     const user = await rt.store.upsertUser({ xHandle: "trader_joe", wallet: "wallet" });
     await rt.store.setProUntil(user.id, "2099-01-01T00:00:00.000Z");
+    const first = await processMention(rt, { id: "m_unlinked_1", authorId: "user_1", authorUsername: "trader_joe", text: `@askLens ${FIXTURES.danger.mint}` });
+    const second = await processMention(rt, { id: "m_unlinked_2", authorId: "user_1", authorUsername: "trader_joe", text: `@askLens ${FIXTURES.safe.mint}` });
+    expect(first.status).toBe("replied");
+    expect(second.status).toBe("rate_limited");
+    // Mentions never attach an X id to an account.
+    expect((await store.findUser({ xHandle: "trader_joe" }))?.xUserId).toBeNull();
+  });
+
+  it("lets a linked Pro account keep asking after the free daily cap", async () => {
+    const { rt, x, store } = deps(1);
+    await linkedPro(store, "user_1", "trader_joe", "wallet");
     const first = await processMention(rt, {
       id: "mention_1",
       authorId: "user_1",

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Notice } from "@/components/notice";
+import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatTime, formatUsdc, shortMint } from "@/lib/format";
@@ -17,7 +18,9 @@ type AccountBody = {
     xHandle: string | null;
     wallet: string | null;
     proUntil: string | null;
+    xLinkedAt: string | null;
   } | null;
+  linkCode?: { code: string; expiresAt: string } | null;
   watches?: Watch[];
   tier?: "free" | "pro";
   restricted?: boolean;
@@ -271,8 +274,8 @@ export function AccountPanel({
           <h2 className="font-serif text-2xl tracking-tight">{pro ? "Pro" : "Free"}</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div>
-              <dt className="text-faint">X handle</dt>
-              <dd>{user.xHandle ? `@${user.xHandle}` : "None on this record"}</dd>
+              <dt className="text-faint">X account</dt>
+              <dd>{user.xLinkedAt && user.xHandle ? `@${user.xHandle} (linked by DM)` : "Not linked"}</dd>
             </div>
             <div>
               <dt className="text-faint">Wallet</dt>
@@ -298,17 +301,26 @@ export function AccountPanel({
               .
             </p>
           ) : null}
-          {!user.xHandle ? (
-            <p className="mt-3 text-sm leading-6 text-muted">
-              This plan has no X handle. Warning DMs need the account that tags @justasklens. Include that handle the
-              next time you start checkout with this wallet.
-            </p>
-          ) : (
+          {pro && user.xLinkedAt ? (
             <p className="mt-3 text-sm leading-6 text-faint">
-              DMs go to this X account when a watched mint is checked as HIGH. Lens does not hold funds for the
-              account.
+              Linked to @{user.xHandle}. No daily cap for that X account, and DMs go to it when a watched mint is checked
+              as HIGH. Lens does not hold funds for the account.
             </p>
-          )}
+          ) : pro && account?.linkCode ? (
+            <div className="mt-4 rounded-xl border border-line bg-panel-2 p-4">
+              <p className="text-sm text-muted">Link your X account</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="font-mono text-xl tracking-wide text-ink">{account.linkCode.code}</p>
+                <CopyButton value={account.linkCode.code} label="Copy code" />
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                DM this code to @justasklens on X from the account that should get Pro. It works once and expires{" "}
+                {formatTime(account.linkCode.expiresAt)}. Only that X account gets the perks.
+              </p>
+            </div>
+          ) : !pro ? (
+            <p className="mt-3 text-sm leading-6 text-faint">After paying, sign here again to get your X link code.</p>
+          ) : null}
         </section>
       ) : null}
 

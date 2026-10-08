@@ -1,5 +1,5 @@
 import { newId } from "../ids.js";
-import type { XClient, XPost } from "./types.js";
+import type { XClient, XDm, XPost } from "./types.js";
 
 export class MockXClient implements XClient {
   mentions: XPost[] = [];
@@ -7,6 +7,8 @@ export class MockXClient implements XClient {
   replies: Array<{ id: string; inReplyToId: string; text: string }> = [];
   dms: Array<{ id: string; recipientId: string; text: string }> = [];
   timeline: XPost[] = [];
+  inbox: XDm[] = [];
+  dmReads = 0;
 
   seed(post: XPost): void {
     this.posts.set(post.id, post);
@@ -43,6 +45,13 @@ export class MockXClient implements XClient {
     this.timeline.push(post);
     this.posts.set(id, post);
     return { id };
+  }
+
+  async listDms(sinceId?: string): Promise<XDm[]> {
+    this.dmReads += 1;
+    return this.inbox
+      .filter((dm) => !sinceId || compareIds(dm.id, sinceId) > 0)
+      .sort((a, b) => compareIds(a.id, b.id));
   }
 
   async sendDm(input: { recipientId: string; text: string }): Promise<{ id: string }> {

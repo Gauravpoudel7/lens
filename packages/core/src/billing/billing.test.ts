@@ -94,10 +94,11 @@ describe("solana pay", () => {
         ];
       },
     };
-    const started = await startUsdcCheckout({ config: cfg, store, chain }, { xHandle: "@Trader", wallet: treasury });
+    const started = await startUsdcCheckout({ config: cfg, store, chain }, { wallet: treasury });
     expect(started.ok).toBe(true);
     if (!started.ok) return;
-    expect(started.user.xHandle).toBe("trader");
+    expect(started.user.wallet).toBe(treasury);
+    expect(started.user.xHandle).toBeNull();
     const early = await confirmUsdcCheckout({ config: cfg, store, chain }, started.session.reference);
     expect(early.ok).toBe(false);
     paid = true;
@@ -138,7 +139,7 @@ describe("solana pay", () => {
     const missing = await confirmUsdcCheckout(deps, "missing-reference");
     expect(missing).toMatchObject({ ok: false, reason: "not_found" });
 
-    const started = await startUsdcCheckout(deps, { xHandle: "payer" });
+    const started = await startUsdcCheckout(deps, { wallet: "6bzZwnSvBLur1xr9baRyHZ3Ck4GgiUCUZf8YQ3oXBEm5" });
     expect(started.ok).toBe(true);
     if (!started.ok) return;
 
@@ -167,32 +168,31 @@ describe("solana pay", () => {
     if (late.ok) expect(late.user.tier).toBe("pro");
   });
 
-  it("does not rebind an existing account during checkout", async () => {
+  it("sells Pro by wallet only and never attaches a handle at checkout", async () => {
     const store = new MemoryStore();
     const cfg = config();
+    const none = { async findPayments() { return []; } };
     const victimWallet = "6bzZwnSvBLur1xr9baRyHZ3Ck4GgiUCUZf8YQ3oXBEm5";
-    const attackerWallet = "6CdesJcNbTV5bJ1zVuRNmvbtVtgT3ccchyNT5MbKuKTM";
+    const payerWallet = "6CdesJcNbTV5bJ1zVuRNmvbtVtgT3ccchyNT5MbKuKTM";
     await store.upsertUser({ xHandle: "victim", wallet: victimWallet });
-    const taken = await startUsdcCheckout(
-      { config: cfg, store, chain: { async findPayments() { return []; } } },
-      { xHandle: "victim", wallet: attackerWallet },
-    );
-    expect(taken.ok).toBe(false);
-    expect((await store.findUser({ xHandle: "victim" }))?.wallet).toBe(victimWallet);
 
+    const withHandle = await startUsdcCheckout({ config: cfg, store, chain: none }, { xHandle: "victim", wallet: payerWallet });
+    expect(withHandle).toMatchObject({ ok: false, error: expect.stringMatching(/by wallet/) });
+    expect(await store.findUser({ wallet: payerWallet })).toBeNull();
+
+    // A Free account that exists from a mention (handle, no wallet) no longer blocks paying.
     await store.upsertUser({ xHandle: "mentiononly" });
-    const bind = await startUsdcCheckout(
-      { config: cfg, store, chain: { async findPayments() { return []; } } },
-      { xHandle: "mentiononly", wallet: victimWallet },
-    );
-    expect(bind.ok).toBe(false);
+    const fresh = await startUsdcCheckout({ config: cfg, store, chain: none }, { wallet: payerWallet });
+    expect(fresh.ok).toBe(true);
+    if (!fresh.ok) return;
+    expect(fresh.user.xHandle).toBeNull();
     expect((await store.findUser({ xHandle: "mentiononly" }))?.wallet).toBeNull();
 
-    const invalid = await startUsdcCheckout(
-      { config: cfg, store, chain: { async findPayments() { return []; } } },
-      { xHandle: "newpayer", wallet: "not-a-wallet" },
-    );
-    expect(invalid.ok).toBe(false);
+    const again = await startUsdcCheckout({ config: cfg, store, chain: none }, { wallet: payerWallet });
+    expect(again.ok && again.user.id).toBe(fresh.user.id);
+
+    expect((await startUsdcCheckout({ config: cfg, store, chain: none }, { wallet: "not-a-wallet" })).ok).toBe(false);
+    expect((await startUsdcCheckout({ config: cfg, store, chain: none }, {})).ok).toBe(false);
   });
 
   it("refuses a reused payment signature and extends Pro from the current end", async () => {
@@ -211,7 +211,7 @@ describe("solana pay", () => {
       },
     };
     const deps = { config: cfg, store, chain };
-    const first = await startUsdcCheckout(deps, { xHandle: "payer", wallet: treasury });
+    const first = await startUsdcCheckout(deps, { wallet: treasury });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     await store.setProUntil(first.user.id, "2026-12-01T00:00:00.000Z");
@@ -220,7 +220,7 @@ describe("solana pay", () => {
     if (!renewed.ok) return;
     expect(renewed.user.proUntil?.startsWith("2026-12-31")).toBe(true);
 
-    const second = await startUsdcCheckout(deps, { xHandle: "otherpayer" });
+    const second = await startUsdcCheckout(deps, { wallet: "6CdesJcNbTV5bJ1zVuRNmvbtVtgT3ccchyNT5MbKuKTM" });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     const reused = await confirmUsdcCheckout(deps, second.session.reference);
