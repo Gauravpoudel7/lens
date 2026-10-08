@@ -2,7 +2,7 @@ import { isLinkedPro } from "./accounts.js";
 import { queueWarningAlerts } from "./alerts.js";
 import { claimsFromPosts } from "./claims.js";
 import { listDexCandidates, type TokenCandidate } from "./discover.js";
-import { errorMessage, log, newId, utcDay } from "./ids.js";
+import { errorMessage, log, logError, newId, utcDay } from "./ids.js";
 import { evaluateRisk, levelSummary, snapshotToRuleInput } from "./risk/engine.js";
 import { assertSafeNotice, UNRESOLVED_REPLY } from "./reply/policy.js";
 import { safeSymbol, scrubThirdPartyText } from "./reply/sanitize.js";
@@ -341,6 +341,8 @@ export async function createRiskCheck(
   try {
     published = await deps.proofs.publish(proof.payload);
   } catch (err) {
+    // `detail` is for logs and tests. Callers show a fixed line, never this text.
+    logError("proof publish failed", { checkId: id, detail: errorMessage(err) });
     return { ok: false, error: "proof_failed", detail: errorMessage(err) };
   }
 

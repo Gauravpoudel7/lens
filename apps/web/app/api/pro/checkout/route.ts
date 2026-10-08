@@ -1,9 +1,10 @@
 import { startUsdcCheckout } from "@lens/core";
 import { billingDeps } from "@/lib/billing";
+import { route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const body = (await request.json().catch(() => null)) as { xHandle?: string; wallet?: string } | null;
   const deps = await billingDeps();
   // A handle is refused here on purpose: X accounts are linked later, only by a DM code.
@@ -15,3 +16,5 @@ export async function POST(request: Request) {
     session: result.session,
   });
 }
+
+export const POST = route("checkout POST", handlePost);

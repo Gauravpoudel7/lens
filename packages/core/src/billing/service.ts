@@ -1,6 +1,6 @@
 import { isActivePro, type PaymentRecord, type UserRecord } from "../accounts.js";
 import { isSolanaAddress } from "../discover.js";
-import { newId } from "../ids.js";
+import { logError, newId } from "../ids.js";
 import type { LensConfig } from "../types.js";
 import type { LensStore } from "../store/types.js";
 import {
@@ -56,10 +56,12 @@ export async function startUsdcCheckout(
     return { ok: false, error: "That wallet address is not valid." };
   }
   if (!deps.config.proTreasury) {
-    return { ok: false, error: "Set PRO_TREASURY_WALLET to the wallet that should receive USDC." };
+    logError("pro checkout refused", { detail: "PRO_TREASURY_WALLET is not set" });
+    return { ok: false, error: "Payments are not open yet. Try again later." };
   }
   if (deps.config.proPriceUsdc <= 0) {
-    return { ok: false, error: "PRO_PRICE_USDC must be greater than zero." };
+    logError("pro checkout refused", { detail: "PRO_PRICE_USDC must be greater than zero" });
+    return { ok: false, error: "Payments are not open yet. Try again later." };
   }
   const user = (await deps.store.findUser({ wallet })) ?? (await deps.store.upsertUser({ wallet }));
   const reference = newReference();

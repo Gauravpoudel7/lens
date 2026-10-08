@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { log, safeUrl } from "../ids.js";
+import { rpcCall } from "../net/rpc.js";
 import { withRetry } from "../net/retry.js";
 import type { LensConfig, TokenSnapshot } from "../types.js";
 import {
@@ -296,31 +297,7 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     }
   }
 
-  private async rpc(method: string, params: unknown[]): Promise<unknown> {
-    return withRetry(
-      `rpc ${method}`,
-      async () => {
-        const response = await fetch(this.config.dataRpcUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-          signal: AbortSignal.timeout(8_000),
-        });
-        if (!response.ok) throw new Error(`RPC HTTP ${response.status} ${method}`);
-        const json = (await response.json()) as {
-          result?: unknown;
-          error?: { message?: string; code?: number };
-        };
-        if (json.error) {
-          const message = json.error.message ?? `RPC ${method} failed`;
-          if (json.error.code === 429 || /429|too many requests/i.test(message)) {
-            throw new Error(`RPC HTTP 429 ${method}: ${message}`);
-          }
-          throw new Error(message);
-        }
-        return json.result;
-      },
-      { attempts: this.attempts(), baseMs: 500 },
-    );
+  private rpc(method: string, params: unknown[]): Promise<unknown> {
+    return rpcCall(this.config.dataRpcUrl, method, params, { attempts: this.attempts() });
   }
 }

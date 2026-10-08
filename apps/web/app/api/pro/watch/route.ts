@@ -1,6 +1,7 @@
 import { isActivePro, isSolanaAddress, safeSymbol, watchChangeAllowed } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
 import { readWalletProof, walletUnlocks } from "@/lib/wallet-session";
+import { route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ function authorize(user: { wallet: string | null; proUntil: string | null } | nu
   return allowed;
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     xHandle?: string;
     wallet?: string;
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   return Response.json({ watch, watches });
 }
 
-export async function DELETE(request: Request) {
+async function handleDelete(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     xHandle?: string;
     wallet?: string;
@@ -62,3 +63,6 @@ export async function DELETE(request: Request) {
   await rt.store.removeWatch(user.id, mint);
   return Response.json({ watches: await rt.store.listWatches(user.id) });
 }
+
+export const POST = route("watch POST", handlePost);
+export const DELETE = route("watch DELETE", handleDelete);

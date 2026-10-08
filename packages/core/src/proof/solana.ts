@@ -9,6 +9,7 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 import { errorMessage, logError } from "../ids.js";
+import { withRetry } from "../net/retry.js";
 import { resolveFromRepoRoot } from "../paths.js";
 import type { LensConfig } from "../types.js";
 import { MEMO_PROGRAM_ID, extractMemoFromLogs, memoFromInstructionData } from "./hash.js";
@@ -71,9 +72,13 @@ export function loadKeypairFromConfig(config: Pick<LensConfig, "solanaKeypair" |
 }
 
 export function createSolanaProofPublisher(
-  config: Pick<LensConfig, "solanaRpcUrl" | "solanaCluster" | "solanaKeypair" | "solanaKeypairPath">,
+  config: Pick<LensConfig, "solanaRpcUrl" | "solanaCluster" | "solanaKeypair" | "solanaKeypairPath"> &
+    Partial<Pick<LensConfig, "rpcRetryAttempts">>,
 ): ProofPublisher {
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const attempts = config.rpcRetryAttempts ?? 4;
+  // A confirmed memo never changes, so a report page does not need to fetch it again.
+  const confirmed = new Map<string, ProofMemo>();
   return {
     async publish(payload) {
       const payer = loadKeypairFromConfig(config);
@@ -83,18 +88,23 @@ export function createSolanaProofPublisher(
         data: Buffer.from(payload, "utf8"),
       });
       const transaction = new Transaction().add(instruction);
-      const signature = await sendAndConfirmTransaction(connection, transaction, [payer], {
-        commitment: "confirmed",
-      });
+      const signature = await withRetry(
+        "proof publish",
+        () => sendAndConfirmTransaction(connection, transaction, [payer], { commitment: "confirmed" }),
+        { attempts, baseMs: 500 },
+      );
       return { signature, cluster: config.solanaCluster };
     },
     async readMemo(signature) {
+      const known = confirmed.get(signature);
+      if (known) return known;
       let tx = null;
       for (let attempt = 0; attempt < 3; attempt++) {
-        tx = await connection.getTransaction(signature, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0,
-        });
+        tx = await withRetry(
+          "proof read",
+          () => connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }),
+          { attempts, baseMs: 500 },
+        );
         if (tx) break;
         await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
       }
@@ -103,7 +113,10 @@ export function createSolanaProofPublisher(
       }
       const payload = extractMemoFromTransaction(tx);
       const slotTime = tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null;
-      return { payload, cluster: config.solanaCluster, slotTime, signers: extractSigners(tx) };
+      const memo = { payload, cluster: config.solanaCluster, slotTime, signers: extractSigners(tx) };
+      if (confirmed.size >= 500) confirmed.delete(confirmed.keys().next().value!);
+      confirmed.set(signature, memo);
+      return memo;
     },
   };
 }

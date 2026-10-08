@@ -1,10 +1,11 @@
 import { issueOrReuseLinkCode, redactAccount } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
 import { readWalletProof, walletUnlocks } from "@/lib/wallet-session";
+import { route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   const url = new URL(request.url);
   const handle = url.searchParams.get("handle") ?? "";
   const wallet = url.searchParams.get("wallet") ?? "";
@@ -30,3 +31,5 @@ export async function GET(request: Request) {
     linkCode: code ? { code: code.code, expiresAt: code.expiresAt } : null,
   });
 }
+
+export const GET = route("account GET", handleGet);

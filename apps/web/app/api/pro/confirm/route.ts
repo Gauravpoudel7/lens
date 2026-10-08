@@ -1,9 +1,10 @@
 import { confirmUsdcCheckout, proStatus } from "@lens/core";
 import { billingDeps } from "@/lib/billing";
+import { route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const body = (await request.json().catch(() => null)) as { reference?: string } | null;
   const reference = body?.reference?.trim() ?? "";
   if (!reference) return Response.json({ error: "Paste the payment reference." }, { status: 400 });
@@ -17,3 +18,5 @@ export async function POST(request: Request) {
     ...proStatus(result.user),
   });
 }
+
+export const POST = route("confirm POST", handlePost);

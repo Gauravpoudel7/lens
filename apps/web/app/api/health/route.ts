@@ -1,3 +1,4 @@
+import { errorMessage, logError } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,12 @@ export async function GET() {
       outboundDiscover: rt.config.outboundDiscover,
     });
   } catch (err) {
+    logError("health check failed", { detail: errorMessage(err) });
     return Response.json(
       {
         ok: false,
         db: "error",
-        error: err instanceof Error ? err.message : "health check failed",
+        error: "The database is not reachable.",
       },
       { status: 503 },
     );

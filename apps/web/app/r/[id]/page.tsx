@@ -1,3 +1,4 @@
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -15,11 +16,12 @@ import { getRuntime } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
 
+// Metadata and the page read the same check once per request.
+const loadCheck = cache(async (id: string) => (await getRuntime()).store.getCheck(id));
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const rt = await getRuntime();
-  const check = await rt.store.getCheck(id);
+  const check = await loadCheck(id);
   if (!check) return { title: "Report" };
   return {
     title: `$${check.tokenSymbol} ${check.riskLevel}`,
@@ -40,7 +42,7 @@ function signalClass(signal: Signal): string {
 export default async function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const rt = await getRuntime();
-  const check = await rt.store.getCheck(id);
+  const check = await loadCheck(id);
   if (!check) notFound();
 
   const verification =

@@ -35,6 +35,7 @@ export * from "./swap.js";
 export * from "./trade.js";
 export * from "./accounts.js";
 export * from "./net/retry.js";
+export * from "./net/rpc.js";
 export * from "./net/rate-limit.js";
 export * from "./auth/wallet-proof.js";
 export * from "./reply/sanitize.js";

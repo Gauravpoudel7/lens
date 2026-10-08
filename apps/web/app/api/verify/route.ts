@@ -1,6 +1,7 @@
 import { configuredProofSigner, verifyPostedText } from "@lens/core";
 import { allowRequest, clientKey } from "@/lib/rate-limit";
 import { getRuntime } from "@/lib/runtime";
+import { route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,15 @@ async function run(request: Request, text: string, signature: string) {
   return Response.json(result);
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const body = (await request.json().catch(() => null)) as { text?: string; signature?: string } | null;
   return run(request, body?.text ?? "", body?.signature?.trim() ?? "");
 }
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   const url = new URL(request.url);
   return run(request, url.searchParams.get("text") ?? "", url.searchParams.get("signature")?.trim() ?? "");
 }
+
+export const POST = route("verify POST", handlePost);
+export const GET = route("verify GET", handleGet);

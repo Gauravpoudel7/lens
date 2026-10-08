@@ -1,4 +1,4 @@
-import { withRetry } from "../net/retry.js";
+import { rpcCall } from "../net/rpc.js";
 import type { CheckoutChainReader, SolanaNetwork } from "./checkout-tx.js";
 import { parseParsedTransaction, type PaymentChain, type ReferencePayment } from "./solana-pay.js";
 
@@ -33,7 +33,20 @@ export function createRpcPaymentChain(rpcUrl: string, attempts = 4): PaymentChai
   };
 }
 
+const readers = new Map<string, CheckoutChainReader>();
+
+/** One reader per RPC URL, so the genesis lookup runs once per process instead of once per request. */
 export function createRpcCheckoutReader(rpcUrl: string, attempts = 4): CheckoutChainReader {
+  const key = `${attempts}|${rpcUrl}`;
+  let reader = readers.get(key);
+  if (!reader) {
+    reader = newCheckoutReader(rpcUrl, attempts);
+    readers.set(key, reader);
+  }
+  return reader;
+}
+
+function newCheckoutReader(rpcUrl: string, attempts: number): CheckoutChainReader {
   let network: Promise<SolanaNetwork> | null = null;
   return {
     network() {
@@ -74,27 +87,6 @@ export function createRpcCheckoutReader(rpcUrl: string, attempts = 4): CheckoutC
   };
 }
 
-async function rpc(rpcUrl: string, method: string, params: unknown[], attempts: number): Promise<unknown> {
-  return withRetry(
-    `pay ${method}`,
-    async () => {
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!response.ok) throw new Error(`RPC HTTP ${response.status} ${method}`);
-      const json = (await response.json()) as { result?: unknown; error?: { message?: string; code?: number } };
-      if (json.error) {
-        const message = json.error.message ?? `RPC ${method} failed`;
-        if (json.error.code === 429 || /429|too many requests/i.test(message)) {
-          throw new Error(`RPC HTTP 429 ${method}: ${message}`);
-        }
-        throw new Error(message);
-      }
-      return json.result;
-    },
-    { attempts, baseMs: 500 },
-  );
+function rpc(rpcUrl: string, method: string, params: unknown[], attempts: number): Promise<unknown> {
+  return rpcCall(rpcUrl, method, params, { attempts });
 }

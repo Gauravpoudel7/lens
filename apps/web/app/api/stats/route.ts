@@ -1,9 +1,10 @@
 import { SCORECARD_KINDS, computeStats } from "@lens/core";
 import { getRuntime } from "@/lib/runtime";
+import { route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function handleGet() {
   const rt = await getRuntime();
   const checks = await rt.store.listChecks({ limit: 500, kinds: SCORECARD_KINDS });
   const stats = computeStats(checks, {
@@ -13,3 +14,5 @@ export async function GET() {
   });
   return Response.json(stats);
 }
+
+export const GET = route("stats GET", handleGet);

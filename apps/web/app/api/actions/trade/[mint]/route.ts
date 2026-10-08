@@ -1,7 +1,8 @@
-import { ACTION_RESPONSE_HEADERS, buildBlinkAction, createSwapBuilder, isSolanaAddress } from "@lens/core";
+import { ACTION_RESPONSE_HEADERS, buildBlinkAction, createSwapBuilder, isSolanaAddress, logError } from "@lens/core";
 import { allowRequest, clientKey } from "@/lib/rate-limit";
 import { getRuntime } from "@/lib/runtime";
 import { loadTradeCheck } from "@/lib/trade-check";
+import { BROKEN_MESSAGE, PROOF_FAILED_MESSAGE, route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ async function loadCheck(mint: string) {
   return { rt, ...loaded };
 }
 
-export async function GET(request: Request, context: { params: Promise<{ mint: string }> }) {
+async function handleGet(request: Request, context: { params: Promise<{ mint: string }> }) {
   const { mint } = await context.params;
   if (!isSolanaAddress(mint)) {
     return Response.json({ message: "That is not a Solana token address." }, { status: 400, headers: HEADERS });
@@ -30,14 +31,21 @@ export async function GET(request: Request, context: { params: Promise<{ mint: s
   const loaded = await loadCheck(mint);
   if (!loaded.check) {
     return Response.json(
-      { message: loaded.error === "token_not_found" ? "Token not found." : (loaded.detail ?? "Token not found.") },
+      {
+        message:
+          loaded.error === "proof_failed"
+            ? PROOF_FAILED_MESSAGE
+            : loaded.error === "token_not_found"
+              ? "Token not found. Check the address."
+              : BROKEN_MESSAGE,
+      },
       { status: loaded.error === "proof_failed" ? 502 : 404, headers: HEADERS },
     );
   }
   return Response.json(buildBlinkAction(loaded.check, loaded.rt.config), { headers: HEADERS });
 }
 
-export async function POST(request: Request, context: { params: Promise<{ mint: string }> }) {
+async function handlePost(request: Request, context: { params: Promise<{ mint: string }> }) {
   const { mint } = await context.params;
   if (!isSolanaAddress(mint)) {
     return Response.json({ message: "That is not a Solana token address." }, { status: 400, headers: HEADERS });
@@ -74,7 +82,11 @@ export async function POST(request: Request, context: { params: Promise<{ mint: 
     slippageBps: 100,
   });
   if ("error" in built) {
-    return Response.json({ message: built.error }, { status: 400, headers: HEADERS });
+    logError("jupiter swap build failed", { mint, detail: built.error });
+    return Response.json(
+      { message: "Jupiter could not build this swap. Try again in a minute." },
+      { status: 502, headers: HEADERS },
+    );
   }
   return Response.json(
     {
@@ -84,3 +96,6 @@ export async function POST(request: Request, context: { params: Promise<{ mint: 
     { headers: HEADERS },
   );
 }
+
+export const GET = route("trade action GET", handleGet, { key: "message", headers: HEADERS });
+export const POST = route("trade action POST", handlePost, { key: "message", headers: HEADERS });

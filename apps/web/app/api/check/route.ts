@@ -1,10 +1,11 @@
 import { createRiskCheck } from "@lens/core";
 import { allowRequest, clientKey } from "@/lib/rate-limit";
 import { getRuntime } from "@/lib/runtime";
+import { PROOF_FAILED_MESSAGE, route } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const rt = await getRuntime();
   if (!allowRequest(clientKey(request), rt.config.checkApiLimitPerHour)) {
     return Response.json({ error: "Too many checks from this address. Try again later." }, { status: 429 });
@@ -28,8 +29,8 @@ export async function POST(request: Request) {
       created.error === "no_token"
         ? "No Solana token address or $ticker was found in that text."
         : created.error === "token_not_found"
-          ? "That token could not be loaded from the data provider."
-          : `The proof was not saved. ${created.detail ?? ""}`.trim();
+          ? "That token could not be loaded. Check the address and try again."
+          : PROOF_FAILED_MESSAGE;
     return Response.json({ error }, { status });
   }
   return Response.json({
@@ -40,3 +41,5 @@ export async function POST(request: Request) {
     proof: created.check.proof,
   });
 }
+
+export const POST = route("check POST", handlePost);
