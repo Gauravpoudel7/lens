@@ -47,6 +47,10 @@ function errorNotice(err: unknown, fallback: string): { reason: CheckoutReason; 
 }
 
 /** Errors thrown by the wallet itself, after the server already checked the reference and balances. */
+function networkLabel(network: string): string {
+  return network === "devnet" ? "Devnet" : network === "mainnet-beta" ? "Mainnet" : "the payment network";
+}
+
 function walletNotice(err: unknown, network: string): { reason: CheckoutReason; message: string } {
   if (err instanceof Error && "reason" in err) return errorNotice(err, "The payment could not be prepared.");
   const message = err instanceof Error ? err.message : String((err as { message?: string })?.message ?? "");
@@ -54,11 +58,12 @@ function walletNotice(err: unknown, network: string): { reason: CheckoutReason; 
   if (code === 4001 || /reject|cancel|denied|declined/i.test(message)) {
     return { reason: "rejected", message: "You closed the wallet request. Nothing was sent." };
   }
+  // The server already simulated this transfer on the payment network and it passed. A blockhash or
+  // simulation failure inside the wallet therefore means the wallet is pointed at another network.
   if (/blockhash|simulat/i.test(message)) {
-    const target = network === "devnet" ? "Devnet" : network === "mainnet-beta" ? "Mainnet" : "the network Lens uses";
     return {
       reason: "wrong_network",
-      message: `Your wallet is on a different network. Switch Phantom to ${target} and try again.`,
+      message: `Phantom is on a different network. Switch Phantom to ${networkLabel(network)}, then try again.`,
     };
   }
   return { reason: "other", message: message || "The wallet did not send the payment." };

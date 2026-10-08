@@ -9,6 +9,8 @@ export type CheckoutReason =
   | "rejected"
   | "insufficient_usdc"
   | "insufficient_sol"
+  | "simulation_failed"
+  | "busy"
   | "wrong_network"
   | "wrong_wallet"
   | "already_paid"
@@ -25,6 +27,8 @@ const KNOWN: CheckoutReason[] = [
   "rejected",
   "insufficient_usdc",
   "insufficient_sol",
+  "simulation_failed",
+  "busy",
   "wrong_network",
   "wrong_wallet",
   "already_paid",
@@ -62,6 +66,10 @@ export function checkoutTitle(reason: CheckoutReason): string {
       return "Payment cancelled";
     case "insufficient_usdc":
       return "Not enough USDC";
+    case "simulation_failed":
+      return "Payment would fail";
+    case "busy":
+      return "Network busy";
     case "insufficient_sol":
       return "Not enough SOL for the fee";
     case "wrong_network":

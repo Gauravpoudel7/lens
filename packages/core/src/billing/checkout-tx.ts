@@ -1,5 +1,6 @@
 import { PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { isSolanaAddress } from "../discover.js";
+import { logError } from "../ids.js";
 import { SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "../providers/parse.js";
 import type { LensConfig } from "../types.js";
 import type { LensStore } from "../store/types.js";
@@ -24,6 +25,8 @@ export interface CheckoutChainReader {
   /** Raw token amount, 0n when the token account does not exist. */
   tokenAmount(address: string): Promise<bigint>;
   latestBlockhash(): Promise<string>;
+  /** Runs the unsigned transaction on this network without sending it. `error` is null when it would succeed. */
+  simulate(transactionBase64: string): Promise<{ error: string | null }>;
 }
 
 export type CheckoutTxFailureReason =
@@ -34,7 +37,8 @@ export type CheckoutTxFailureReason =
   | "wrong_wallet"
   | "config"
   | "insufficient_usdc"
-  | "insufficient_sol";
+  | "insufficient_sol"
+  | "simulation_failed";
 
 export function associatedTokenAddress(owner: PublicKey, mint: PublicKey, tokenProgram: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
@@ -150,6 +154,10 @@ export async function prepareCheckoutTx(
   }
 
   const network = await deps.reader.network();
+  if (network === "unknown") {
+    logError("pro checkout tx refused", { detail: "PRO_RPC_URL genesis is not mainnet or devnet" });
+    return fail("config", "Payments are not set up for a known Solana network yet.");
+  }
   const where = networkName(network);
   const mintOwner = await deps.reader.accountOwner(payment.mint);
   if (mintOwner !== SPL_TOKEN_PROGRAM_ID && mintOwner !== TOKEN_2022_PROGRAM_ID) {
@@ -193,5 +201,12 @@ export async function prepareCheckoutTx(
     createTreasuryAta,
   });
   const transaction = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
+  // The wallet does not say which network it is on. Proving the transfer works here first means a later
+  // wallet-side failure can only be the wallet pointing at a different network.
+  const simulated = await deps.reader.simulate(transaction);
+  if (simulated.error) {
+    logError("pro checkout simulation failed", { reference: payment.reference, detail: simulated.error });
+    return fail("simulation_failed", `This payment would fail on ${where}. Try again in a minute.`);
+  }
   return { ok: true, transaction, network };
 }

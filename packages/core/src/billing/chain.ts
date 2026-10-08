@@ -77,6 +77,18 @@ function newCheckoutReader(rpcUrl: string, attempts: number): CheckoutChainReade
       } | null;
       return BigInt(result?.value?.amount ?? "0");
     },
+    async simulate(transactionBase64) {
+      const result = (await rpc(
+        rpcUrl,
+        "simulateTransaction",
+        [transactionBase64, { encoding: "base64", sigVerify: false, replaceRecentBlockhash: true, commitment: "confirmed" }],
+        attempts,
+      )) as { value?: { err?: unknown; logs?: string[] | null } } | null;
+      const err = result?.value?.err;
+      if (!err) return { error: null };
+      const logs = (result?.value?.logs ?? []).slice(-4).join(" | ");
+      return { error: `${JSON.stringify(err)}${logs ? ` ${logs}` : ""}` };
+    },
     async latestBlockhash() {
       const result = (await rpc(rpcUrl, "getLatestBlockhash", [{ commitment: "confirmed" }], attempts)) as {
         value?: { blockhash?: string };

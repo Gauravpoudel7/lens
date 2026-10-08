@@ -1,5 +1,5 @@
 import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { USDC_MINT_MAINNET, loadConfig } from "../config.js";
 import { SPL_TOKEN_PROGRAM_ID } from "../providers/parse.js";
 import { MemoryStore } from "../store/memory.js";
@@ -28,10 +28,13 @@ function config() {
   });
 }
 
-function reader(input: { usdc?: bigint; lamports?: bigint; treasuryAta?: boolean } = {}): CheckoutChainReader {
+function reader(
+  input: { usdc?: bigint; lamports?: bigint; treasuryAta?: boolean; network?: "devnet" | "unknown"; simError?: string } = {},
+): CheckoutChainReader {
   const treasuryAta = associatedTokenAddress(new PublicKey(treasury), mint, TOKEN_PROGRAM_ID).toBase58();
   return {
-    network: async () => "devnet",
+    network: async () => input.network ?? "devnet",
+    simulate: async () => ({ error: input.simError ?? null }),
     accountOwner: async (address) => {
       if (address === USDC_MINT_MAINNET) return TOKEN_PROGRAM_ID.toBase58();
       if (address === treasuryAta) return input.treasuryAta === false ? null : TOKEN_PROGRAM_ID.toBase58();
@@ -136,5 +139,22 @@ describe("checkout transaction", () => {
       { reference, account: payer },
     );
     expect(noRent).toMatchObject({ ok: false, reason: "insufficient_sol" });
+  });
+
+  it("refuses a transfer that fails simulation or an unknown network", async () => {
+    const { store, cfg, reference } = await setup();
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failed = await prepareCheckoutTx(
+      { config: cfg, store, reader: reader({ simError: '{"InstructionError":[0,"Custom"]}' }) },
+      { reference, account: payer },
+    );
+    expect(failed).toMatchObject({ ok: false, reason: "simulation_failed" });
+    if (!failed.ok) expect(failed.error).not.toContain("InstructionError");
+    const unknown = await prepareCheckoutTx(
+      { config: cfg, store, reader: reader({ network: "unknown" }) },
+      { reference, account: payer },
+    );
+    expect(unknown).toMatchObject({ ok: false, reason: "config" });
+    spy.mockRestore();
   });
 });
