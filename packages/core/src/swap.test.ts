@@ -53,7 +53,7 @@ describe("public action URL", () => {
     });
     expect(low).toEqual({
       include: true,
-      url: `https://asklens.com/api/actions/trade/${MINT}`,
+      url: `https://asklens.com/trade/${MINT}`,
     });
     const medium = decideSwapLink({
       asked: true,
@@ -109,6 +109,7 @@ describe("public action URL", () => {
       mint: "",
     });
     expect(unscored).toEqual({ include: false, reason: "token was not scored" });
+    expect(replyHasSwapLink(`Swap: https://asklens.com/trade/${MINT}`, MINT)).toBe(true);
     expect(replyHasSwapLink(`Swap: https://asklens.com/api/actions/trade/${MINT}`, MINT)).toBe(true);
     expect(replyHasSwapLink("no link here", MINT)).toBe(false);
   });

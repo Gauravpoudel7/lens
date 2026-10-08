@@ -1,4 +1,5 @@
 import type { RiskLevel } from "./types.js";
+import { tradePageUrl } from "./trade.js";
 
 const TRADE_VERB = /\b(buy|swap|trade)(?!-)\b/gi;
 
@@ -51,12 +52,14 @@ export function publicActionBaseUrl(value: string): string | null {
   return `${url.origin}${path === "/" ? "" : path}`;
 }
 
+/** The reply links to the human `/trade` page; Blink-aware clients map it to the Action via `actions.json`. */
 export function swapActionUrl(base: string, mint: string): string {
-  return `${base.replace(/\/$/, "")}/api/actions/trade/${mint}`;
+  return tradePageUrl(base, mint);
 }
 
+/** True for the `/trade/<mint>` link and for the older `/api/actions/trade/<mint>` link in cached replies. */
 export function replyHasSwapLink(text: string, mint: string): boolean {
-  return text.includes(`/api/actions/trade/${mint}`);
+  return text.includes(`/trade/${mint}`);
 }
 
 /**

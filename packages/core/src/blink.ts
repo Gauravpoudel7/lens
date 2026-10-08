@@ -56,6 +56,8 @@ export const ACTIONS_JSON_HEADERS: Record<string, string> = {
  */
 export const ACTIONS_JSON = {
   rules: [
+    // The human page from the reply swap link unfurls as the same Action.
+    { pathPattern: "/trade/*", apiPath: "/api/actions/trade/*" },
     {
       pathPattern: "/api/actions/**",
       apiPath: "/api/actions/**",

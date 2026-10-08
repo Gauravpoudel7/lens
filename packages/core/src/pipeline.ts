@@ -201,7 +201,10 @@ function cachedReplyMatchesSwap(deps: LensDeps, mentionText: string, cached: Che
     riskLevel: cached.riskLevel,
     mint: cached.tokenMint,
   });
-  const hasLink = replyHasSwapLink(cached.replyText, cached.tokenMint);
+  // A link must be today's exact URL, so replies cached with the old Blink API link are rewritten.
+  const hasLink = decision?.include
+    ? cached.replyText.includes(decision.url)
+    : replyHasSwapLink(cached.replyText, cached.tokenMint);
   if ((decision?.include === true) === hasLink) {
     if (decision && !decision.include) {
       log("swap link omitted", { reason: decision.reason, symbol: cached.tokenSymbol });

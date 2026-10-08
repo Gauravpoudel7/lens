@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { configuredProofSigner, levelSummary, verifyPostedText, xStatusUrl, type Fact, type Signal } from "@lens/core";
+import { configuredProofSigner, jupiterSwapUrl, levelSummary, verifyPostedText, xStatusUrl, type Fact, type Signal } from "@lens/core";
 import { MintLine } from "@/components/mint-line";
 import { TokenLogo } from "@/components/token-logo";
 import { Button } from "@/components/ui/button";
@@ -276,7 +276,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           ) : (
             <div className="mt-4">
               <Button asChild>
-                <a href={`https://jup.ag/swap/SOL-${check.tokenMint}`} target="_blank" rel="noreferrer">
+                <a href={jupiterSwapUrl(check.tokenMint)} target="_blank" rel="noopener noreferrer">
                   Trade on Jupiter
                 </a>
               </Button>

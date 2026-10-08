@@ -266,7 +266,7 @@ describe("mention pipeline", () => {
       });
       expect(result.status).toBe("replied");
       if (result.status !== "replied") return;
-      const url = `https://asklens.com/api/actions/trade/${FIXTURES.safe.mint}`;
+      const url = `https://asklens.com/trade/${FIXTURES.safe.mint}`;
       expect(result.riskLevel).toBe("LOW");
       expect(result.replyText.match(/https?:\/\/\S+/g)).toEqual([url]);
       expect(result.replyText).toContain(`$SAFE (6bzZ…BEm5)`);
@@ -295,7 +295,7 @@ describe("mention pipeline", () => {
       if (result.status !== "replied") return;
       expect(result.riskLevel).toBe("HIGH");
       expect(result.replyText).not.toMatch(/https?:\/\//);
-      expect(result.replyText).not.toContain("/api/actions/trade/");
+      expect(result.replyText).not.toContain("/trade/");
     });
     expect(lines.some((line) => line.includes("HIGH risk has no buy link"))).toBe(true);
   });
@@ -408,7 +408,7 @@ describe("mention pipeline", () => {
     if (first.status !== "replied" || buy.status !== "replied" || again.status !== "replied" || plain.status !== "replied") {
       return;
     }
-    const url = `https://asklens.com/api/actions/trade/${FIXTURES.safe.mint}`;
+    const url = `https://asklens.com/trade/${FIXTURES.safe.mint}`;
     expect(first.replyText).not.toMatch(/https?:\/\//);
     expect(buy.replyText.match(/https?:\/\/\S+/g)).toEqual([url]);
     expect(buy.cached).toBe(false);
@@ -420,6 +420,26 @@ describe("mention pipeline", () => {
     expect(plain.replyText).not.toMatch(/https?:\/\//);
     expect(plain.checkId).not.toBe(buy.checkId);
     expect([...store.checks.values()].filter((check) => check.tokenMint === FIXTURES.safe.mint)).toHaveLength(3);
+  });
+
+  it("rewrites a cached reply that still has the old Blink API link, and proves the new text", async () => {
+    const { rt, x, store } = deps(5, { PUBLIC_BASE_URL: "https://asklens.com", PUBLIC_SITE_NAME: "Lens" });
+    x.seed({ id: "parent_old", authorId: "promoter", authorUsername: "mooncalls", text: "Look at $SAFE", parentId: null, createdAt: "2026-10-07T12:00:00.000Z" });
+    const first = await processMention(rt, { id: "mention_old_1", authorId: "user_1", authorUsername: "a", text: "@justasklens buy $SAFE", parentId: "parent_old" });
+    expect(first.status).toBe("replied");
+    if (first.status !== "replied") return;
+    const stored = store.checks.get(first.checkId);
+    if (!stored) throw new Error("check missing");
+    const oldUrl = `https://asklens.com/api/actions/trade/${FIXTURES.safe.mint}`;
+    stored.replyText = stored.replyText.replace(`https://asklens.com/trade/${FIXTURES.safe.mint}`, oldUrl);
+    const next = await processMention(rt, { id: "mention_old_2", authorId: "user_2", authorUsername: "b", text: "@justasklens swap $SAFE", parentId: "parent_old" });
+    expect(next.status).toBe("replied");
+    if (next.status !== "replied") return;
+    const url = `https://asklens.com/trade/${FIXTURES.safe.mint}`;
+    expect(next.cached).toBe(false);
+    expect(next.replyText.match(/https?:\/\/\S+/g)).toEqual([url]);
+    const check = await store.getCheck(next.checkId);
+    expect(check?.proof?.payload).toContain(hashReply(next.replyText));
   });
 
   it("counts a swap reply toward the existing daily caps", async () => {

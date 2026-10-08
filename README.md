@@ -231,12 +231,12 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `X_BEARER_TOKEN` | empty | Optional app-only read of a parent post. Cannot post or send a DM |
 | `X_BOT_USER_ID` | empty | Optional at runtime. If empty, the worker calls `/2/users/me` once at startup, caches the id, and logs a hint to set this. `npm run doctor` wants it set before go-live |
 | `X_REPLY_LINKS` | `false` | `true` puts `Report: <url>` back in replies, outbound posts, and warning DMs. Off by default because X bills a URL much higher |
-| `X_SWAP_LINKS_ON_REQUEST` | `true` | A mention that says buy, swap, or trade gets one Blink URL when the verdict is LOW or MEDIUM and `PUBLIC_BASE_URL` is public https. HIGH and unscored tickers stay link-free. Set `false` to turn that off. These replies still count toward the daily caps |
+| `X_SWAP_LINKS_ON_REQUEST` | `true` | A mention that says buy, swap, or trade gets one `/trade/<mint>` link when the verdict is LOW or MEDIUM and `PUBLIC_BASE_URL` is public https. HIGH and unscored tickers stay link-free. Set `false` to turn that off. These replies still count toward the daily caps |
 | `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
 | `PROOF_SIGNER` | empty | Pubkey that must have signed a chain memo. Empty uses the proof keypair above |
 | `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day. Pro accounts skip this |
 | `MAX_X_REPLIES_PER_DAY` | `50` | Bot-wide replies per UTC day. The worker stops replying when it is reached. Pro does not skip it |
-| `CHECK_API_LIMIT_PER_HOUR` | `30` | Manual check, verify, and Blink, per `X-Real-IP`, per process |
+| `CHECK_API_LIMIT_PER_HOUR` | `30` | Manual check, verify, and Blink, per `X-Real-IP`, per process. `/trade` pages share the Blink count, and only new checks count |
 | `OUTCOME_WINDOW_DAYS` | `7` | How long before a check is scored |
 | `SHARP_DROP_PCT` | `-30` | HIGH is right if price change is at or below this |
 | `CALL_WIN_PCT` | `20` | A call wins at or above this |
@@ -310,6 +310,7 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 - `GET /api/calls/:id`
 - `GET /api/stats`
 - `POST /api/verify` and `GET /api/verify?text=&signature=`
+- `GET /trade/:mint` Buy page for people. Shows the token, its risk level, up to three facts, and a “Buy on Jupiter” button that opens `jup.ag/swap?sell=<SOL>&buy=<mint>` in a new tab. HIGH has no button and no Jupiter link. An invalid address shows a short notice and runs nothing. It reuses a check from the last 15 minutes; a new one counts against the same hourly limit as the Blink route and is a `blink` check, so it stays off the public record. Lens never touches a wallet on this page. `actions.json` maps `/trade/*` to `/api/actions/trade/*`, so Blink-aware clients turn the same link into the Action.
 - `GET /api/actions/trade/:mint` Solana Action. HIGH risk returns a warning and no buy. Other levels return Jupiter buy actions when `DATA_MODE=live`.
 - `POST /api/actions/trade/:mint?amount=0.1` with `{ "account": "<wallet>" }` returns `{ "transaction", "message" }`.
 - `GET /actions.json` and `OPTIONS /actions.json` map `/api/actions/**` to itself and send `Access-Control-Allow-Origin: *`.

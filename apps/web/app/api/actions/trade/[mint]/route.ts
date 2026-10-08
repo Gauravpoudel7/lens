@@ -1,6 +1,7 @@
-import { ACTION_RESPONSE_HEADERS, buildBlinkAction, createRiskCheck, createSwapBuilder, isSolanaAddress } from "@lens/core";
+import { ACTION_RESPONSE_HEADERS, buildBlinkAction, createSwapBuilder, isSolanaAddress } from "@lens/core";
 import { allowRequest, clientKey } from "@/lib/rate-limit";
 import { getRuntime } from "@/lib/runtime";
+import { loadTradeCheck } from "@/lib/trade-check";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +11,11 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: HEADERS });
 }
 
+// GET and POST rate-limit every request before calling this, so the loader's own gate always passes.
 async function loadCheck(mint: string) {
   const rt = await getRuntime();
-  const recent = await rt.store.latestCheckForMint(mint, 15 * 60 * 1000);
-  if (recent && recent.riskLevel !== "NONE") return { rt, check: recent };
-  const created = await createRiskCheck(rt, { kind: "blink", mint, claimText: "" });
-  if (!created.ok) return { rt, check: null, error: created.error, detail: created.detail };
-  return { rt, check: created.check };
+  const loaded = await loadTradeCheck(rt, mint, () => true);
+  return { rt, ...loaded };
 }
 
 export async function GET(request: Request, context: { params: Promise<{ mint: string }> }) {

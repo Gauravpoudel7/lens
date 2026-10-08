@@ -161,7 +161,7 @@ describe("reply policy", () => {
 
   it("keeps exactly one blink URL when a swap link is requested", () => {
     const swapUrl =
-      "https://asklens.com/api/actions/trade/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+      "https://asklens.com/trade/DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
     const draft = {
       ...input,
       riskLevel: "LOW" as const,

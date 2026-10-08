@@ -38,6 +38,7 @@ describe("blink action", () => {
 
   it("publishes an idempotent actions.json rule and the CORS headers the spec requires", () => {
     expect(ACTIONS_JSON.rules).toEqual([
+      { pathPattern: "/trade/*", apiPath: "/api/actions/trade/*" },
       { pathPattern: "/api/actions/**", apiPath: "/api/actions/**" },
     ]);
     expect(ACTION_CORS_HEADERS["Access-Control-Allow-Origin"]).toBe("*");

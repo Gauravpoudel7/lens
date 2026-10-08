@@ -8,5 +8,10 @@ export function allowRequest(key: string, limit: number, windowMs = 60 * 60 * 10
 
 /** `bucket` keeps check, verify, and Blink limits from spending each other's quota. */
 export function clientKey(request: Request, bucket = "check"): string {
-  return `${bucket}:${trustedClientIp(request.headers)}`;
+  return clientKeyFromHeaders(request.headers, bucket);
+}
+
+/** Same key for Server Components, which get headers but no Request. */
+export function clientKeyFromHeaders(headers: Headers, bucket = "check"): string {
+  return `${bucket}:${trustedClientIp(headers)}`;
 }
