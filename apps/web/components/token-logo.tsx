@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 
-export function TokenLogo({ mint, symbol, size = 56 }: { mint: string; symbol: string; size?: number }) {
+export function TokenLogo({
+  mint,
+  symbol,
+  size = 56,
+  fallback = true,
+}: {
+  mint: string;
+  symbol: string;
+  size?: number;
+  /** When false, render nothing instead of the letter mark if no logo loads. */
+  fallback?: boolean;
+}) {
   const sources = mint
     ? [
         `https://static.jup.ag/tokens/${mint}`,
@@ -13,6 +24,7 @@ export function TokenLogo({ mint, symbol, size = 56 }: { mint: string; symbol: s
   const letter = (symbol || "?").replace("$", "").slice(0, 1).toUpperCase();
 
   if (!sources[index]) {
+    if (!fallback) return null;
     return (
       <div
         className="grid shrink-0 place-items-center rounded-full border border-line bg-panel-2 font-semibold text-ink"

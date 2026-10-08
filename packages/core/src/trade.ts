@@ -27,8 +27,6 @@ export interface TradeView {
   shortMint: string;
   level: RiskLevel | "NONE";
   facts: Array<{ text: string; signal: Fact["signal"] }>;
-  /** MEDIUM only: the caution findings, one short line. */
-  caution: string | null;
   /** Null for HIGH and unscored tokens. This is the only place the page decides whether a buy link exists. */
   buyUrl: string | null;
   reportPath: string;
@@ -42,7 +40,6 @@ export function tradeView(check: CheckRecord): TradeView {
     .sort((a, b) => RANK[a.signal] - RANK[b.signal])
     .slice(0, 3)
     .map((fact) => ({ text: fact.short, signal: fact.signal }));
-  const cautions = check.facts.filter((fact) => fact.signal === "caution").map((fact) => fact.short.replace(/\.$/, ""));
   const canBuy = check.riskLevel === "LOW" || check.riskLevel === "MEDIUM";
   return {
     symbol: check.tokenSymbol,
@@ -50,7 +47,6 @@ export function tradeView(check: CheckRecord): TradeView {
     shortMint: shortMint(check.tokenMint),
     level: check.riskLevel,
     facts: ranked,
-    caution: check.riskLevel === "MEDIUM" && cautions.length ? cautions.slice(0, 2).join(" · ") : null,
     buyUrl: canBuy ? jupiterSwapUrl(check.tokenMint) : null,
     reportPath: `/r/${check.id}`,
     checkedAt: check.createdAt,

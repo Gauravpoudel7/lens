@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { ArrowUpRight } from "lucide-react";
 import { DISCLAIMER, isSolanaAddress, tradeView, type TradeView } from "@lens/core";
 import { CopyButton } from "@/components/copy-button";
 import { TokenLogo } from "@/components/token-logo";
@@ -47,7 +48,7 @@ export async function generateMetadata({ params }: { params: Promise<{ mint: str
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="rise mx-auto w-full max-w-[480px] py-10 sm:py-16">{children}</main>;
+  return <main className="rise mx-auto w-full max-w-[480px] py-6 sm:py-8">{children}</main>;
 }
 
 function Message({ title, mint }: { title: string; mint?: string }) {
@@ -79,12 +80,15 @@ function Action({ view }: { view: TradeView }) {
       </div>
     );
   }
+  const medium = view.level === "MEDIUM";
   return (
     <div>
-      {view.caution ? <p className="mb-3 text-sm text-med">Caution: {view.caution}</p> : null}
-      <Button asChild className="h-14 w-full text-base">
+      {medium ? <p className="mb-2.5 text-sm text-med">Buy with care</p> : null}
+      <Button asChild variant={medium ? "outline" : "default"} className="h-14 w-full text-base">
         <a href={view.buyUrl} target="_blank" rel="noopener noreferrer">
           Buy on Jupiter
+          <ArrowUpRight className="size-4" aria-hidden />
+          <span className="sr-only">(opens Jupiter in a new tab)</span>
         </a>
       </Button>
     </div>
@@ -105,7 +109,7 @@ export default async function TradePage({ params }: { params: Promise<{ mint: st
   return (
     <Shell>
       <header className="flex items-center gap-3">
-        <TokenLogo mint={view.mint} symbol={view.symbol} size={44} />
+        <TokenLogo mint={view.mint} symbol={view.symbol} size={44} fallback={false} />
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold tracking-tight text-ink">${view.symbol}</h1>
           <div className="-ml-2 flex items-center">
@@ -115,17 +119,17 @@ export default async function TradePage({ params }: { params: Promise<{ mint: st
         </div>
       </header>
 
-      <section aria-label="Risk level" className={`mt-8 rounded-3xl border px-6 py-7 ${tone.box}`}>
+      <section aria-label="Risk level" className={`mt-5 rounded-3xl border px-6 py-5 ${tone.box}`}>
         <p className={`text-5xl font-semibold tracking-tight ${tone.text}`}>{view.level === "NONE" ? "—" : view.level}</p>
         <p className="mt-2 text-sm text-muted">
-          {levelName(view.level)} · <time dateTime={view.checkedAt}>{checkedAgo(view.checkedAt)}</time>
+          <time dateTime={view.checkedAt}>{checkedAgo(view.checkedAt)}</time>
         </p>
       </section>
 
       {view.facts.length ? (
-        <ul className="mt-6 divide-y divide-line border-y border-line">
+        <ul className="mt-5 divide-y divide-line border-y border-line">
           {view.facts.map((fact) => (
-            <li key={fact.text} className="flex items-center gap-3 py-3.5 text-[15px] text-ink">
+            <li key={fact.text} className="flex items-center gap-3 py-2.5 text-[15px] text-ink">
               <span aria-hidden className={`size-2 shrink-0 rounded-full ${DOT[fact.signal]}`} />
               <span className="truncate">{fact.text}</span>
             </li>
@@ -133,11 +137,11 @@ export default async function TradePage({ params }: { params: Promise<{ mint: st
         </ul>
       ) : null}
 
-      <div className="mt-8">
+      <div className="mt-5">
         <Action view={view} />
       </div>
 
-      <p className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-faint">
+      <p className="mt-5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-faint">
         <Link href={view.reportPath} className="underline-offset-4 hover:text-ink hover:underline">
           Full report
         </Link>

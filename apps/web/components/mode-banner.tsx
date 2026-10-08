@@ -7,8 +7,8 @@ export function ModeBanner({ dataMode, proofMode }: { dataMode: string; proofMod
     );
   }
   const parts = [
-    dataMode === "mock" ? "market figures are fixtures, not mainnet" : null,
-    proofMode === "mock" ? "proofs are stored in this database, not on Solana" : null,
+    dataMode === "mock" ? "Market figures are fixtures, not mainnet" : null,
+    proofMode === "mock" ? "Proofs are stored in this database, not on Solana" : null,
   ].filter(Boolean);
   return (
     <p className="border-b border-med/40 bg-med-bg px-4 py-2 text-center text-sm text-med">

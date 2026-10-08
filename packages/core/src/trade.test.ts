@@ -24,18 +24,17 @@ function check(level: CheckRecord["riskLevel"], facts: Fact[]): CheckRecord {
 const GOOD = [fact("mint_authority", "good", "Mint authority off"), fact("freeze_authority", "good", "Freeze authority off")];
 
 describe("trade page view", () => {
-  it("LOW gets a Jupiter buy link and no caution line", () => {
+  it("LOW gets a Jupiter buy link", () => {
     const view = tradeView(check("LOW", GOOD));
     expect(view.buyUrl).toBe(jupiterSwapUrl(MINT));
-    expect(view.caution).toBeNull();
     expect(view.shortMint).toBe("JUPy…DvCN");
     expect(view.reportPath).toBe("/r/chk_1");
   });
 
-  it("MEDIUM keeps the buy link and lists the caution facts above it", () => {
+  it("MEDIUM keeps the buy link, with its caution facts listed first", () => {
     const view = tradeView(check("MEDIUM", [...GOOD, fact("top_holders", "caution", "Top 10 hold 66%."), fact("liquidity", "caution", "Liquidity $24k.")]));
     expect(view.buyUrl).toBe(jupiterSwapUrl(MINT));
-    expect(view.caution).toBe("Top 10 hold 66% · Liquidity $24k");
+    expect(view.facts.slice(0, 2).map((f) => f.signal)).toEqual(["caution", "caution"]);
   });
 
   it("HIGH and unscored tokens get no buy link", () => {
