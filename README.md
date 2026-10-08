@@ -215,6 +215,8 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `LLM_MODE` | `auto` | `template` skips the model even if a key is set |
 | `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Scorecard and Blink links. Omitted from X posts unless `X_REPLY_LINKS=true`. A non-local host is also the plain-text “Full report on …” line when `PUBLIC_SITE_NAME` is empty |
 | `PUBLIC_SITE_NAME` | empty | Plain-text place named in link-free replies, such as `Lens`. Omit it while the site is not public. Localhost does not count |
+| `X_BOT_HANDLE` | `justasklens` | The bot's X handle without `@`. The site and the link-code DM step use it |
+| `LENS_SESSION_SECRET` | empty | HMAC key for the 24-hour wallet session cookie on `/account`. Empty means a random key per process, so sessions end on restart. `npm run doctor` warns when it is empty |
 | `SOLANA_CLUSTER` | `devnet` | Where proofs are written. Token data is still mainnet |
 | `SOLANA_RPC_URL` | devnet public RPC | Proof RPC |
 | `DATA_RPC_URL` | mainnet public RPC, or Helius if `HELIUS_API_KEY` is set | Mint, supply, holders |
@@ -232,7 +234,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `X_BOT_USER_ID` | empty | Optional at runtime. If empty, the worker calls `/2/users/me` once at startup, caches the id, and logs a hint to set this. `npm run doctor` wants it set before go-live |
 | `X_REPLY_LINKS` | `false` | `true` puts `Report: <url>` back in replies, outbound posts, and warning DMs. Off by default because X bills a URL much higher |
 | `X_SWAP_LINKS_ON_REQUEST` | `true` | A mention that says buy, swap, or trade gets one `/trade/<mint>` link when the verdict is LOW or MEDIUM and `PUBLIC_BASE_URL` is public https. HIGH and unscored tickers stay link-free. Set `false` to turn that off. These replies still count toward the daily caps |
-| `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana` |
+| `SOLANA_KEYPAIR` or `SOLANA_KEYPAIR_PATH` | empty | Required for `PROOF_MODE=solana`. A relative path is read from the repo root, so the web app and the worker load the same file |
 | `PROOF_SIGNER` | empty | Pubkey that must have signed a chain memo. Empty uses the proof keypair above |
 | `RATE_LIMIT_PER_USER_PER_DAY` | `5` | Per X user, UTC day. Pro accounts skip this |
 | `MAX_X_REPLIES_PER_DAY` | `50` | Bot-wide replies per UTC day. The worker stops replying when it is reached. Pro does not skip it |
@@ -250,6 +252,8 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PRO_TREASURY_WALLET` | empty | Wallet that receives Pro USDC |
 | `PRO_PRICE_USDC` | `10` | Price for one Pro period. The Pro page reads this. Unset means 10 USDC |
 | `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |
+| `ALERT_DMS_PER_USER_PER_DAY` | `10` | Warning DMs per Pro watcher per UTC day |
+| `ALERT_DMS_PER_DAY` | `100` | Warning DMs bot-wide per UTC day |
 | `PRO_CHECKOUT_TTL_HOURS` | `24` | Unpaid Solana Pay checkouts older than this are reported as expired. A full USDC transfer still confirms |
 | `USDC_MINT` | mainnet USDC | Override only for a devnet payment test |
 | `PRO_RPC_URL` | same as `DATA_RPC_URL` | Mainnet RPC used to verify the USDC transfer |

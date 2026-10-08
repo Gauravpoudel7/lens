@@ -5,9 +5,6 @@ import { publicSiteLabel, shortMint } from "./reply/policy.js";
 import { safeSymbol } from "./reply/sanitize.js";
 import type { CheckRecord } from "./types.js";
 
-/** One warning DM per watcher per mint per UTC day, plus these caps. */
-export const ALERTS_PER_USER_PER_DAY = 10;
-export const ALERTS_GLOBAL_PER_DAY = 100;
 
 export function warningAlertText(
   check: Pick<CheckRecord, "tokenSymbol" | "tokenMint" | "id">,
@@ -32,13 +29,16 @@ export async function queueWarningAlerts(deps: LensDeps, check: CheckRecord): Pr
     const watchers = await deps.store.listProWatchers(check.tokenMint, now);
     const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
     const today = await deps.store.listAlertsSince(since);
-    if (today.length >= ALERTS_GLOBAL_PER_DAY) return 0;
+    // One warning DM per watcher per mint per UTC day, plus the configured caps.
+    const perUser = deps.config.alertDmsPerUserPerDay;
+    const global = deps.config.alertDmsPerDay;
+    if (today.length >= global) return 0;
     let sent = 0;
     for (const user of watchers) {
-      if (today.length >= ALERTS_GLOBAL_PER_DAY) break;
+      if (today.length >= global) break;
       if (await deps.store.hasAlert(user.id, check.id)) continue;
       const forUser = today.filter((alert) => alert.userId === user.id);
-      if (forUser.length >= ALERTS_PER_USER_PER_DAY) continue;
+      if (forUser.length >= perUser) continue;
       if (forUser.some((alert) => alert.mint === check.tokenMint)) continue;
       today.push({
         id: "",

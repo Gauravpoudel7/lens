@@ -1,13 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { repoRoot } from "@lens/db";
+import { resolveFromRepoRoot } from "@lens/core";
 
 const MIN_LAMPORTS = Math.round(0.05 * LAMPORTS_PER_SOL);
 
 export async function ensureDevnetKeypair(): Promise<{ file: string; pubkey: string; balanceSol: number }> {
-  const relative = process.env.SOLANA_KEYPAIR_PATH?.trim() || "data/devnet-keypair.json";
-  const file = path.isAbsolute(relative) ? relative : path.join(repoRoot, relative);
+  const file = resolveFromRepoRoot(process.env.SOLANA_KEYPAIR_PATH?.trim() || "data/devnet-keypair.json");
   mkdirSync(path.dirname(file), { recursive: true });
 
   let keypair: Keypair;

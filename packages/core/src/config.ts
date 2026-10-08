@@ -1,3 +1,5 @@
+import { DEFAULTS } from "./defaults.js";
+import { resolveFromRepoRoot } from "./paths.js";
 import type { LensConfig } from "./types.js";
 
 export const USDC_MINT_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -29,6 +31,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     (heliusApiKey
       ? `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`
       : "https://api.mainnet-beta.solana.com");
+  const keypairPath = clean(env.SOLANA_KEYPAIR_PATH);
   const solanaRpcUrl =
     clean(env.SOLANA_RPC_URL) ??
     (cluster === "devnet" ? "https://api.devnet.solana.com" : dataRpcUrl);
@@ -40,6 +43,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     llmMode: env.LLM_MODE === "template" ? "template" : "auto",
     publicBaseUrl: (env.PUBLIC_BASE_URL ?? "http://127.0.0.1:3847").replace(/\/$/, ""),
     publicSiteName: clean(env.PUBLIC_SITE_NAME),
+    xBotHandle: (clean(env.X_BOT_HANDLE) ?? DEFAULTS.xBotHandle).replace(/^@/, ""),
     solanaCluster: cluster,
     solanaRpcUrl,
     dataRpcUrl,
@@ -62,7 +66,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     xOauth2AccessToken: clean(env.X_OAUTH2_ACCESS_TOKEN),
     xOauth2RefreshToken: clean(env.X_OAUTH2_REFRESH_TOKEN),
     xOauth2RedirectUri: clean(env.X_OAUTH2_REDIRECT_URI) ?? "http://127.0.0.1:4391/callback",
-    rateLimitPerUserPerDay: num(env.RATE_LIMIT_PER_USER_PER_DAY, 5),
+    rateLimitPerUserPerDay: num(env.RATE_LIMIT_PER_USER_PER_DAY, DEFAULTS.rateLimitPerUserPerDay),
     maxXRepliesPerDay: Math.max(0, Math.floor(num(env.MAX_X_REPLIES_PER_DAY, 50))),
     outcomeWindowDays: num(env.OUTCOME_WINDOW_DAYS, 7),
     sharpDropPct: num(env.SHARP_DROP_PCT, -30),
@@ -70,12 +74,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     pollIntervalMs: num(env.POLL_INTERVAL_MS, 180_000),
     // DM reads cost API credits; never more often than every 3 minutes.
     xDmPollMs: Math.max(180_000, num(env.X_DM_POLL_MS, 180_000)),
-    jupiterFeeBps: num(env.JUPITER_FEE_BPS, 50),
+    jupiterFeeBps: num(env.JUPITER_FEE_BPS, DEFAULTS.jupiterFeeBps),
     jupiterFeeAccount: clean(env.JUPITER_FEE_ACCOUNT),
     jupiterApiKey: clean(env.JUPITER_API_KEY),
     jupiterBaseUrl: (env.JUPITER_BASE_URL ?? "https://api.jup.ag").replace(/\/$/, ""),
     solanaKeypair: clean(env.SOLANA_KEYPAIR),
-    solanaKeypairPath: clean(env.SOLANA_KEYPAIR_PATH),
+    // Resolved here once so apps/web (cwd apps/web) and the worker (cwd root) read the same file.
+    solanaKeypairPath: keypairPath ? resolveFromRepoRoot(keypairPath) : undefined,
     proofSigner: clean(env.PROOF_SIGNER),
     outboundEnabled: env.OUTBOUND_ENABLED === "true",
     outboundMints: (env.OUTBOUND_MINTS ?? "")
@@ -86,11 +91,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     outboundDiscover: env.OUTBOUND_DISCOVER === "true",
     checkApiLimitPerHour: num(env.CHECK_API_LIMIT_PER_HOUR, 30),
     rpcRetryAttempts: Math.max(1, Math.floor(num(env.RPC_RETRY_ATTEMPTS, 4))),
-    proPriceUsdc: num(env.PRO_PRICE_USDC, 10),
-    proPeriodDays: Math.max(1, Math.floor(num(env.PRO_PERIOD_DAYS, 30))),
+    proPriceUsdc: num(env.PRO_PRICE_USDC, DEFAULTS.proPriceUsdc),
+    proPeriodDays: Math.max(1, Math.floor(num(env.PRO_PERIOD_DAYS, DEFAULTS.proPeriodDays))),
     proCheckoutTtlHours: Math.max(1, Math.floor(num(env.PRO_CHECKOUT_TTL_HOURS, 24))),
     proTreasury: clean(env.PRO_TREASURY_WALLET),
     proRpcUrl: clean(env.PRO_RPC_URL) ?? dataRpcUrl,
     usdcMint: clean(env.USDC_MINT) ?? USDC_MINT_MAINNET,
+    alertDmsPerUserPerDay: Math.max(0, Math.floor(num(env.ALERT_DMS_PER_USER_PER_DAY, DEFAULTS.alertDmsPerUserPerDay))),
+    alertDmsPerDay: Math.max(0, Math.floor(num(env.ALERT_DMS_PER_DAY, DEFAULTS.alertDmsPerDay))),
+    sessionSecret: clean(env.LENS_SESSION_SECRET),
   };
 }

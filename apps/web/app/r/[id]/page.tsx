@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { configuredProofSigner, jupiterSwapUrl, levelSummary, verifyPostedText, xStatusUrl, type Fact, type Signal } from "@lens/core";
+import {
+  LIQUIDITY_LARGE_USD,
+  LIQUIDITY_SMALL_USD,
+  configuredProofSigner,
+  jupiterSwapUrl, levelSummary, verifyPostedText, xStatusUrl, type Fact, type Signal } from "@lens/core";
 import { MintLine } from "@/components/mint-line";
 import { TokenLogo } from "@/components/token-logo";
 import { Button } from "@/components/ui/button";
@@ -11,7 +15,6 @@ import { getRuntime } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
 
-const LIQUIDITY_FULL_USD = 50_000;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -162,8 +165,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         <Meter
           label="Liquidity"
           valueLabel={formatUsd(liquidity)}
-          width={liquidity == null ? 0 : Math.max(4, Math.min(100, (liquidity / LIQUIDITY_FULL_USD) * 100))}
-          tone={liquidity == null ? "muted" : liquidity < 10_000 ? "high" : liquidity < LIQUIDITY_FULL_USD ? "med" : "low"}
+          width={liquidity == null ? 0 : Math.max(4, Math.min(100, (liquidity / LIQUIDITY_LARGE_USD) * 100))}
+          tone={liquidity == null ? "muted" : liquidity < LIQUIDITY_SMALL_USD ? "high" : liquidity < LIQUIDITY_LARGE_USD ? "med" : "low"}
           caption="The bar fills at $50k of pooled liquidity. Deeper pools stay full."
         />
       </section>

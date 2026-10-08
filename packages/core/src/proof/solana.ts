@@ -8,6 +8,8 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import bs58 from "bs58";
+import { errorMessage, logError } from "../ids.js";
+import { resolveFromRepoRoot } from "../paths.js";
 import type { LensConfig } from "../types.js";
 import { MEMO_PROGRAM_ID, extractMemoFromLogs, memoFromInstructionData } from "./hash.js";
 
@@ -28,12 +30,17 @@ export function configuredProofSigner(
   config: Pick<LensConfig, "proofSigner" | "solanaKeypair" | "solanaKeypairPath">,
 ): string | null {
   if (config.proofSigner) return config.proofSigner;
+  if (!config.solanaKeypair && !config.solanaKeypairPath) return null;
   try {
     return loadKeypairFromConfig(config).publicKey.toBase58();
-  } catch {
+  } catch (err) {
+    // The path is safe to log; the key bytes never are.
+    logError("proof signer not loaded", { path: config.solanaKeypairPath ?? null, detail: errorMessage(err) });
     return null;
   }
 }
+
+const keypairs = new Map<string, Keypair>();
 
 export function loadKeypair(raw: string): Keypair {
   const trimmed = raw.trim();
@@ -50,8 +57,16 @@ export function loadKeypair(raw: string): Keypair {
 }
 
 export function loadKeypairFromConfig(config: Pick<LensConfig, "solanaKeypair" | "solanaKeypairPath">): Keypair {
-  if (config.solanaKeypair) return loadKeypair(config.solanaKeypair);
-  if (config.solanaKeypairPath) return loadKeypair(readFileSync(config.solanaKeypairPath, "utf8"));
+  const key = config.solanaKeypair ? `env:${config.solanaKeypair}` : config.solanaKeypairPath ? `file:${config.solanaKeypairPath}` : null;
+  const known = key ? keypairs.get(key) : undefined;
+  if (known) return known;
+  if (key) {
+    const keypair = config.solanaKeypair
+      ? loadKeypair(config.solanaKeypair)
+      : loadKeypair(readFileSync(resolveFromRepoRoot(config.solanaKeypairPath!), "utf8"));
+    keypairs.set(key, keypair);
+    return keypair;
+  }
   throw new Error("SOLANA_KEYPAIR or SOLANA_KEYPAIR_PATH is required when PROOF_MODE=solana");
 }
 

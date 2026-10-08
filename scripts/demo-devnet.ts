@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { FIXTURES, processMention } from "@lens/core";
+import { FIXTURES, explorerTxUrl, processMention } from "@lens/core";
 import { bootstrapEnv, createRuntime, repoRoot } from "@lens/db";
 import { ensureDevnetKeypair } from "./devnet-keypair.js";
 import { schemaFile } from "./prepare-schema.mjs";
@@ -38,7 +38,7 @@ const signature = check?.proof?.txSignature;
 if (!signature || signature.startsWith("mock_")) {
   throw new Error("Expected a real devnet memo signature.");
 }
-const explorer = `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+const explorer = explorerTxUrl(signature, "devnet");
 console.log(
   JSON.stringify(
     {

@@ -150,6 +150,8 @@ export interface LensConfig {
   publicBaseUrl: string;
   /** Plain-text site name for link-free replies. Empty means omit the scorecard line. */
   publicSiteName?: string;
+  /** The bot's X handle without @. */
+  xBotHandle: string;
   solanaCluster: "devnet" | "mainnet-beta";
   solanaRpcUrl: string;
   dataRpcUrl: string;
@@ -206,4 +208,9 @@ export interface LensConfig {
   proTreasury?: string;
   proRpcUrl: string;
   usdcMint: string;
+  /** Warning DMs: per Pro watcher and bot-wide, per UTC day. */
+  alertDmsPerUserPerDay: number;
+  alertDmsPerDay: number;
+  /** HMAC key for the 24 h wallet session cookie. Unset means a random key per process. */
+  sessionSecret?: string;
 }

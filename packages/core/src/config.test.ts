@@ -36,3 +36,23 @@ describe("loadConfig product defaults", () => {
     expect(jupiterApiKeyHeader(config.jupiterApiKey)).toEqual({ "x-api-key": "test-key" });
   });
 });
+
+describe("loadConfig handle, caps, and session", () => {
+  it("defaults the handle and DM caps and reads overrides", () => {
+    const base = loadConfig({});
+    expect(base.xBotHandle).toBe("justasklens");
+    expect(base.alertDmsPerUserPerDay).toBe(10);
+    expect(base.alertDmsPerDay).toBe(100);
+    expect(base.sessionSecret).toBeUndefined();
+    const set = loadConfig({
+      X_BOT_HANDLE: "@otherbot",
+      ALERT_DMS_PER_USER_PER_DAY: "3",
+      ALERT_DMS_PER_DAY: "20",
+      LENS_SESSION_SECRET: " s3cret ",
+    });
+    expect(set.xBotHandle).toBe("otherbot");
+    expect(set.alertDmsPerUserPerDay).toBe(3);
+    expect(set.alertDmsPerDay).toBe(20);
+    expect(set.sessionSecret).toBe("s3cret");
+  });
+});

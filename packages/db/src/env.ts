@@ -1,10 +1,8 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
+import { repoRoot as findRepoRoot } from "@lens/core";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-
-export const repoRoot = path.resolve(here, "../../..");
+export const repoRoot = findRepoRoot();
 
 let loaded = false;
 
