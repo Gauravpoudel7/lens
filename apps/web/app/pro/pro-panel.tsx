@@ -28,6 +28,42 @@ type ConfirmBody = {
   user?: { xHandle?: string | null; wallet?: string | null; proUntil?: string | null };
 };
 
+type WalletProvider = {
+  connect(): Promise<{ publicKey: { toString(): string } }>;
+  signAndSendTransaction(transaction: unknown): Promise<{ signature: string }>;
+};
+
+/** Phantom injects `window.phantom.solana`; other wallets, and older Phantom builds, use `window.solana`. */
+function walletProvider(): WalletProvider | null {
+  const scope = window as Window & { phantom?: { solana?: WalletProvider }; solana?: WalletProvider };
+  const provider = scope.phantom?.solana ?? scope.solana;
+  return provider?.signAndSendTransaction ? provider : null;
+}
+
+function errorNotice(err: unknown, fallback: string): { reason: CheckoutReason; message: string } {
+  const message = err instanceof Error ? err.message : fallback;
+  const reason = err instanceof Error && "reason" in err ? String((err as { reason?: string }).reason ?? "") : "";
+  return { reason: checkoutReason(message, reason), message };
+}
+
+/** Errors thrown by the wallet itself, after the server already checked the reference and balances. */
+function walletNotice(err: unknown, network: string): { reason: CheckoutReason; message: string } {
+  if (err instanceof Error && "reason" in err) return errorNotice(err, "The payment could not be prepared.");
+  const message = err instanceof Error ? err.message : String((err as { message?: string })?.message ?? "");
+  const code = (err as { code?: number } | null)?.code;
+  if (code === 4001 || /reject|cancel|denied|declined/i.test(message)) {
+    return { reason: "rejected", message: "You closed the wallet request. Nothing was sent." };
+  }
+  if (/blockhash|simulat/i.test(message)) {
+    const target = network === "devnet" ? "Devnet" : network === "mainnet-beta" ? "Mainnet" : "the network Lens uses";
+    return {
+      reason: "wrong_network",
+      message: `Your wallet is on a different network. Switch Phantom to ${target} and try again.`,
+    };
+  }
+  return { reason: "other", message: message || "The wallet did not send the payment." };
+}
+
 export function ProPanel({
   priceUsd,
   periodDays,
@@ -46,7 +82,7 @@ export function ProPanel({
   const [reference, setReference] = useState("");
   const [qr, setQr] = useState<string | null>(null);
   const [phase, setPhase] = useState<"edit" | "pay" | "done">("edit");
-  const [pending, setPending] = useState<"checkout" | "confirm" | null>(null);
+  const [pending, setPending] = useState<"checkout" | "confirm" | "wallet" | "waiting" | null>(null);
   const [notice, setNotice] = useState<{ reason: CheckoutReason; message: string } | null>(null);
   const [done, setDone] = useState<ConfirmBody | null>(null);
   const [pasted, setPasted] = useState(false);
@@ -107,12 +143,62 @@ export function ProPanel({
       setReference(next.reference);
       setPhase("pay");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Checkout failed.";
-      const reason = err instanceof Error && "reason" in err ? String((err as { reason?: string }).reason ?? "") : "";
-      setNotice({ reason: checkoutReason(message, reason), message });
+      setNotice(errorNotice(err, "Checkout failed."));
     } finally {
       setPending(null);
     }
+  }
+
+  async function onPay() {
+    if (!session) return;
+    const provider = walletProvider();
+    if (!provider) {
+      setNotice({ reason: "no_wallet", message: "Install Phantom or scan the QR with your phone." });
+      return;
+    }
+    setPending("wallet");
+    setNotice(null);
+    let network = "";
+    try {
+      const { publicKey } = await provider.connect();
+      const payload = await post("/api/pro/checkout/tx", {
+        reference: session.reference,
+        account: publicKey.toString(),
+      });
+      network = String(payload.network ?? "");
+      const { Transaction } = await import("@solana/web3.js");
+      const bytes = Uint8Array.from(atob(String(payload.transaction)), (char) => char.charCodeAt(0));
+      await provider.signAndSendTransaction(Transaction.from(bytes));
+    } catch (err) {
+      setNotice(walletNotice(err, network));
+      setPending(null);
+      return;
+    }
+    setPending("waiting");
+    const deadline = Date.now() + 90_000;
+    for (;;) {
+      try {
+        const payload = (await post("/api/pro/confirm", { reference: session.reference })) as ConfirmBody;
+        setDone(payload);
+        setPhase("done");
+        break;
+      } catch (err) {
+        const next = errorNotice(err, "Verification failed.");
+        if (next.reason !== "pending") {
+          setNotice(next);
+          break;
+        }
+        if (Date.now() > deadline) {
+          setNotice({
+            reason: "pending",
+            message: "The wallet sent the payment, but Solana has not confirmed it yet. Check the chain again in a minute.",
+          });
+          break;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
+    setPending(null);
   }
 
   async function onConfirm() {
@@ -128,10 +214,7 @@ export function ProPanel({
       setDone(payload);
       setPhase("done");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Verification failed.";
-      const reason = err instanceof Error && "reason" in err ? String((err as { reason?: string }).reason ?? "") : "";
-      const kind = checkoutReason(message, reason);
-      setNotice({ reason: kind, message });
+      setNotice(errorNotice(err, "Verification failed."));
       if (session) setPhase("pay");
     } finally {
       setPending(null);
@@ -214,27 +297,33 @@ export function ProPanel({
           <div>
             <h3 className="font-serif text-2xl tracking-tight">Send {price} USDC</h3>
             <p className="mt-2 text-sm leading-6 text-muted">
-              Scan the code or open the link in your wallet. It pays {session.recipient}. Lens does not hold this USDC.
-              The unpaid link expires after {ttlHours} hours.
+              It pays {session.recipient}. Lens does not hold this USDC. The unpaid link expires after {ttlHours} hours.
             </p>
           </div>
-          {qr ? (
-            // Data URL from the local qrcode library.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={qr} alt="Solana Pay QR code" width={240} height={240} className="rounded-xl bg-white p-2" />
-          ) : (
-            <p className="text-sm text-faint">The QR code could not be drawn. Use the link below.</p>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline">
-              <a href={session.solanaPayUrl}>Open in wallet</a>
-            </Button>
-            <CopyButton value={session.solanaPayUrl} label="Copy payment link" />
+          <Button type="button" disabled={pending !== null} onClick={onPay}>
+            {pending === "wallet" ? "Opening the wallet…" : "Pay with Phantom"}
+          </Button>
+          {pending === "waiting" ? <p className="status-wait text-sm text-med">Waiting for confirmation…</p> : null}
+          <div className="space-y-3 border-t border-line pt-4">
+            <p className="text-sm text-muted">On your phone? Scan the code with a Solana wallet.</p>
+            {qr ? (
+              // Data URL from the local qrcode library.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={qr} alt="Solana Pay QR code" width={240} height={240} className="rounded-xl bg-white p-2" />
+            ) : (
+              <p className="text-sm text-faint">The QR code could not be drawn. Use the link below.</p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <CopyButton value={session.solanaPayUrl} label="Copy payment link" />
+              <a href={session.solanaPayUrl} className="text-sm text-accent-text hover:text-ink">
+                Open in wallet app
+              </a>
+            </div>
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted">Show the payment link</summary>
+              <p className="mt-2 break-all font-mono text-xs text-faint">{session.solanaPayUrl}</p>
+            </details>
           </div>
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted">Show the payment link</summary>
-            <p className="mt-2 break-all font-mono text-xs text-faint">{session.solanaPayUrl}</p>
-          </details>
           <div>
             <p className="text-sm text-muted">Reference</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -249,7 +338,7 @@ export function ProPanel({
             </Notice>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={pending !== null} onClick={onConfirm}>
+            <Button type="button" variant="outline" disabled={pending !== null} onClick={onConfirm}>
               {pending === "confirm" ? "Checking Solana…" : "I sent it — check the chain"}
             </Button>
             <Button

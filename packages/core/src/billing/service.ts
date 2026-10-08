@@ -150,12 +150,16 @@ export async function confirmUsdcCheckout(
       "wrong_amount",
     );
   }
-  const created = Date.parse(payment.createdAt);
-  const ageMs = Number.isFinite(created) ? now.getTime() - created : 0;
-  if (ageMs > deps.config.proCheckoutTtlHours * 60 * 60 * 1000) {
+  if (checkoutExpired(payment, deps.config.proCheckoutTtlHours, now)) {
     return fail("This checkout has expired. Start a new one and pay that reference.", "expired");
   }
   return fail("No confirmed USDC transfer to the treasury includes this reference yet.", "pending");
+}
+
+export function checkoutExpired(payment: Pick<PaymentRecord, "createdAt">, ttlHours: number, now = new Date()): boolean {
+  const created = Date.parse(payment.createdAt);
+  const ageMs = Number.isFinite(created) ? now.getTime() - created : 0;
+  return ageMs > ttlHours * 60 * 60 * 1000;
 }
 
 export function cardRail(): PaymentRail {

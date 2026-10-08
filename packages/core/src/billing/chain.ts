@@ -1,5 +1,11 @@
 import { withRetry } from "../net/retry.js";
+import type { CheckoutChainReader, SolanaNetwork } from "./checkout-tx.js";
 import { parseParsedTransaction, type PaymentChain, type ReferencePayment } from "./solana-pay.js";
+
+const GENESIS: Record<string, SolanaNetwork> = {
+  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d": "mainnet-beta",
+  EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG: "devnet",
+};
 
 export function createRpcPaymentChain(rpcUrl: string, attempts = 4): PaymentChain {
   return {
@@ -23,6 +29,47 @@ export function createRpcPaymentChain(rpcUrl: string, attempts = 4): PaymentChai
         found.push({ signature, ...parsed });
       }
       return found;
+    },
+  };
+}
+
+export function createRpcCheckoutReader(rpcUrl: string, attempts = 4): CheckoutChainReader {
+  let network: Promise<SolanaNetwork> | null = null;
+  return {
+    network() {
+      network ??= rpc(rpcUrl, "getGenesisHash", [], attempts).then(
+        (hash) => GENESIS[String(hash)] ?? "unknown",
+        (error: unknown) => {
+          network = null;
+          throw error;
+        },
+      );
+      return network;
+    },
+    async accountOwner(address) {
+      const result = (await rpc(rpcUrl, "getAccountInfo", [address, { encoding: "base64" }], attempts)) as {
+        value?: { owner?: string } | null;
+      } | null;
+      return result?.value?.owner ?? null;
+    },
+    async lamports(address) {
+      const result = (await rpc(rpcUrl, "getBalance", [address], attempts)) as { value?: number } | null;
+      return BigInt(result?.value ?? 0);
+    },
+    async tokenAmount(address) {
+      const owner = await this.accountOwner(address);
+      if (!owner) return 0n;
+      const result = (await rpc(rpcUrl, "getTokenAccountBalance", [address], attempts)) as {
+        value?: { amount?: string };
+      } | null;
+      return BigInt(result?.value?.amount ?? "0");
+    },
+    async latestBlockhash() {
+      const result = (await rpc(rpcUrl, "getLatestBlockhash", [{ commitment: "confirmed" }], attempts)) as {
+        value?: { blockhash?: string };
+      } | null;
+      if (!result?.value?.blockhash) throw new Error("RPC getLatestBlockhash returned no blockhash");
+      return result.value.blockhash;
     },
   };
 }
