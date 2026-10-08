@@ -29,8 +29,9 @@ design-system/lens/   UI UX Pro Max output plus the Lens decisions on top of it
 
 - `spotlight.tsx` accepts `fill` (the spec demo passes it; the original props did not), removes the same listener functions it adds, and uses `m.div` so it works inside `LazyMotion strict`.
 - `.loader` (the Suspense fallback) is defined in `app/globals.css`.
-- The 3D scene mounts only when the hero is in view, and never under reduced motion, under 768 px, or when `navigator.deviceMemory < 4`. A CSS poster shows instead.
+- The 3D scene mounts only when the hero is in view, and never under reduced motion, under 768 px, or when `navigator.deviceMemory < 4`. A CSS poster shows instead. If the scene file is blocked or fails to load, the same poster shows and the rest of the page stays up. A load that finishes after the robot was hidden is ignored.
 - `splite.tsx` takes an optional `onLoad(app)`. The hero uses it to move `Camera 2` to a mid shot before Spline’s own intro pull-back starts (its default head close-up crops the arms) and to turn on global events so the head follows the cursor over the text column too. If you swap the scene, update the camera name and position in `hero-stage.tsx`.
+- The scene file is preloaded only when the viewport is at least 768px wide and the user does not prefer reduced motion. Phones and reduced-motion desktops do not download it.
 - `splite-demo.tsx` is the spec demo kept for reference. It is not on the page.
 
 ## Copy rules

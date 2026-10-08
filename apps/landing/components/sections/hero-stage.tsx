@@ -8,6 +8,7 @@ import { Spotlight } from "@/components/ui/spotlight";
 import { ApertureMark } from "@/components/logo";
 import { EASE } from "@/components/motion/ease";
 import { SPLINE_SCENE } from "@/content/copy";
+import { heroVisual, shouldKeepSplineLoad } from "@/lib/landing-budget";
 
 export function HeroSpotlight() {
   return <Spotlight size={520} fill="rgb(255 255 255 / 0.10)" springOptions={{ bounce: 0, stiffness: 120, damping: 20 }} />;
@@ -47,16 +48,22 @@ export function HeroStage() {
   // null until measured on the client, so desktop never flashes the poster.
   const [use3D, setUse3D] = useState<boolean | null>(null);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   // Spline renders every frame even when nobody can see it; pause it while the hero is scrolled away.
   const stage = useRef<HTMLDivElement>(null);
   const app = useRef<Application | null>(null);
   const onScreen = useRef(true);
+  // Bumped only when the robot is hidden, so a load that finishes afterwards is ignored.
+  const loadToken = useRef(0);
+  const robotShown = useRef(false);
 
   // Re-check on breakpoint or motion-setting changes, e.g. browser zoom crossing 768px.
   useEffect(() => {
     const update = () => {
       const ok = canRun3D();
+      if (!ok) loadToken.current += 1;
+      robotShown.current = ok;
       setUse3D(ok);
       if (!ok) {
         setReady(false); // a remount fades in again after its own load
@@ -74,6 +81,7 @@ export function HeroStage() {
     if (!el) return;
     const io = new IntersectionObserver(([entry]) => {
       onScreen.current = entry.isIntersecting;
+      if (!robotShown.current) return;
       if (entry.isIntersecting) app.current?.play();
       else app.current?.stop();
     });
@@ -81,10 +89,14 @@ export function HeroStage() {
     return () => io.disconnect();
   }, []);
 
+  const visual = heroVisual(use3D, use3D === true, failed);
+  // Captured when this scene is shown. A later hide bumps loadToken, so this load is stale.
+  const startedToken = loadToken.current;
+
   return (
     <div ref={stage} role="img" aria-label="Lens, shown as a 3D analyst that follows your cursor" className="relative h-[320px] w-full md:h-full">
-      {use3D === false && <Poster />}
-      {use3D && (
+      {visual === "poster" && <Poster />}
+      {visual === "scene" && (
         // The scene scales with canvas height, so height follows width here; otherwise the hands crop.
         // -left-12 gives the hands room when the robot turns; the canvas is transparent and sits under the text column.
         // Centered vertically so the head sits level with the headline; the bottom fades so the legs don't end on a hard edge.
@@ -99,12 +111,19 @@ export function HeroStage() {
             scene={SPLINE_SCENE}
             className="h-full w-full"
             onLoad={(spline) => {
+              // The library still calls this after disposing a scene that crossed 768px while loading.
+              if (!shouldKeepSplineLoad(startedToken, loadToken.current, robotShown.current)) return;
               // Follow the cursor anywhere on the page, not only over the canvas (the text column sits on top of it).
               spline.setGlobalEvents(true);
               startMidShot(spline);
               setReady(true);
               app.current = spline;
               if (!onScreen.current) spline.stop();
+            }}
+            onError={() => {
+              app.current = null;
+              setReady(false);
+              setFailed(true);
             }}
           />
         </m.div>

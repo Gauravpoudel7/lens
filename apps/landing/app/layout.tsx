@@ -4,6 +4,7 @@ import { MotionProvider } from "@/components/motion/provider";
 import { AsmrBackground } from "@/components/ui/asmr-background";
 import { SITE_URL, X_HANDLE } from "@/lib/site";
 import { SPLINE_SCENE } from "@/content/copy";
+import { SPLINE_PRELOAD_MEDIA } from "@/lib/landing-budget";
 import "./globals.css";
 
 const sans = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
@@ -45,8 +46,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <head>
         <link rel="preconnect" href="https://prod.spline.design" crossOrigin="" />
-        {/* Start the 1.3 MB scene download with the page; phones never load the 3D hero. */}
-        <link rel="preload" href={SPLINE_SCENE} as="fetch" crossOrigin="anonymous" media="(min-width: 768px)" />
+        {/* Start the 1.3 MB scene with the page only where the hero will show it.
+            Reduced motion and viewports under 768px never mount the robot, so they skip the file.
+            A matching desktop still preloads from the first HTML byte. */}
+        <link rel="preload" href={SPLINE_SCENE} as="fetch" crossOrigin="anonymous" media={SPLINE_PRELOAD_MEDIA} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
       </head>
       <body>

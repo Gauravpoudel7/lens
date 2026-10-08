@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { asmrParticleCount, asmrStepsPerFrame, asmrTrailAlpha } from "@/lib/landing-budget";
 import { cn } from "@/lib/utils";
 
 // Adapted from the ASMR static background demo: charcoal and glass shards that swirl toward the cursor.
@@ -9,7 +10,7 @@ import { cn } from "@/lib/utils";
 const MAGNETIC_RADIUS = 200;
 const VORTEX_STRENGTH = 0.025;
 const PULL_STRENGTH = 0.05;
-const TRAIL = "rgba(5, 5, 6, 0.18)"; // --canvas
+const NARROW = "(max-width: 767px)";
 
 type Particle = {
   x: number;
@@ -55,7 +56,13 @@ export function AsmrBackground({ className }: { className?: string }) {
     let width = (canvas.width = host.clientWidth);
     let height = (canvas.height = host.clientHeight);
     // ponytail: count fixed at mount size; re-seed on resize only if density looks off after rotation.
-    const count = Math.min(450, Math.round((width * height) / 2000));
+    // Phones keep the same density. A large narrow window is capped, and it draws every other
+    // frame with two steps so the drift and the fade match the 60fps desktop loop.
+    const narrow = window.matchMedia(NARROW).matches;
+    const count = asmrParticleCount(width, height, narrow);
+    const steps = asmrStepsPerFrame(narrow);
+    const trail = `rgba(5, 5, 6, ${asmrTrailAlpha(narrow)})`;
+    let gate = 0;
     const particles = Array.from({ length: count }, () => makeParticle(width, height));
     const mouse = { x: -1000, y: -1000 };
     // The swirl follows the cursor only while it moves, fading out shortly after it stops.
@@ -134,11 +141,18 @@ export function AsmrBackground({ className }: { className?: string }) {
     }
 
     function render() {
+      if (narrow) {
+        gate ^= 1;
+        if (gate === 0) {
+          frame = requestAnimationFrame(render);
+          return;
+        }
+      }
       activity = Math.max(0, 1 - (performance.now() - lastMove) / SETTLE_MS);
-      ctx!.fillStyle = TRAIL;
+      ctx!.fillStyle = trail;
       ctx!.fillRect(0, 0, width, height);
       for (const p of particles) {
-        update(p);
+        for (let i = 0; i < steps; i++) update(p);
         draw(p);
       }
       resetState();
