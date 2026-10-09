@@ -1,4 +1,5 @@
 import type { Fact, RiskLevel } from "../types.js";
+import { fitsX } from "./length.js";
 
 export interface ReplyDraftInput {
   riskLevel: RiskLevel;
@@ -115,7 +116,7 @@ export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): str
   const chosen: string[] = [];
   for (const short of shorts) {
     const candidate = render(header, [...chosen, short], closer, swapUrl);
-    if (candidate.length <= maxLength) chosen.push(short);
+    if (fitsX(candidate, maxLength)) chosen.push(short);
     else break;
   }
   let text: string;
