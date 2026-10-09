@@ -10,11 +10,42 @@ X replies, outbound posts, and warning DMs are link-free unless `X_REPLY_LINKS=t
 | --- | --- | --- | --- | --- |
 | 1 | Token calls | Must | Done | `publishOutbound` proves, then posts. LOW is a call. The worker runs `runOutboundCycle` when `OUTBOUND_ENABLED=true`. `OUTBOUND_DISCOVER=true` adds DexScreener profiles and boosts. Daily cap is `OUTBOUND_DAILY_CAP` (default 8). MEDIUM discoveries are not posted. |
 | 2 | Warnings | Must | Done | HIGH outbound posts are kind `warning`. The same proved reply is what gets posted. |
-| 3 | @justasklens replies | Must | Live replies sent | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. On 2026-10-07 mention reads and replies worked as @justasklens. See “Live X replies” below. A `$ticker` is scored only when Jupiter lists exactly one verified token. |
+| 3 | @justasklens replies | Must | Live replies sent | Poll, dedupe, free daily cap, Pro bypass, prove, then reply. The mention's own text picks the token before the parent post (2026-10-09). On 2026-10-07 mention reads and replies worked as @justasklens. See “Live X replies” below. A `$ticker` is scored only when Jupiter lists exactly one verified token. |
 | 4 | On-chain proof | Must | Done on devnet | Mock is still the default for `npm run demo`. Five live checks below each have a confirmed devnet memo. `POST /api/verify` matched the Bonk reply to its memo. |
 | 5 | Public scorecard | Must | Done | Home shows win rate, label accuracy, how steady the calls were, and recent checks, with an empty state when nothing is scored. Report leads with the verdict and a text label, the mint, plain-language facts, and the proof. A ticker that is not scored shows that notice instead of a level. Mock stays labeled. |
 | 6 | Trade button (Blink) | Should | Done | Reply swap links open `/trade/<mint>`, a plain page with a Jupiter link (no Blinks extension needed). HIGH has no buy. Jupiter runs only when `DATA_MODE=live`. `actions.json` is served with CORS. X unfurling needs Dialect registry approval. |
 | 7 | Pro alerts | Could | Done, payment live path untested with a real USDC transfer; DM linking untested against live X | Pro is bought by wallet. The X account is linked only by DMing a one-time code (`LENS-XXXX-XXXX`, 24 h) shown on `/account` after a wallet signature; the worker reads DMs at most every 3 minutes and only while a code is open. Perks (no daily cap, warning DMs) need that link. Watchlist on `/account`, DM on HIGH through `XClient.sendDm` (mock in tests). USDC Solana Pay reference transfer, verified from token balance changes. On desktop, `/pro` pays in one click with Phantom: create the checkout, `POST /api/pro/checkout/tx` builds the unsigned transfer (`prepareCheckoutTx`: idempotent treasury ATA create if missing, `TransferChecked` of the exact price with the reference as a read-only key) on `PRO_RPC_URL`, checks the payer's USDC and SOL there, refuses an RPC whose genesis is not mainnet or devnet, and simulates the transfer before returning it. The page polls the chain, then asks for one wallet signature and opens `/account` signed in. Phantom does not report its network, so a wallet-side blockhash or simulation failure after the server simulation passed is reported as "switch Phantom to <network>". Checked in a browser with a stubbed Phantom that signs with a real ed25519 key (pay, confirm, sign in, link code, watchlist add and remove, sign out, public lookup, sign in again, QR path) against a scratch database; not yet paid with a real Phantom. The QR and link stay for phones. `/account` keeps a 24 h httpOnly session cookie (HMAC over wallet and expiry, `LENS_SESSION_SECRET`) after one signature; nonces are single use; watchlist writes need the cookie and a same-site Origin. `/api/pro/confirm` returns only the paying wallet. A missing reference, a short amount, or an expired unpaid link does not start Pro. Card rail exists and refuses checkout. |
+
+## Reply data fixes, 2026-10-09
+
+Four live replies posted numbers that were wrong. Causes, from the stored snapshots and a read-only re-check:
+
+- `$SOL` (`EPPi…SEnj`, $2563M, top 10 100%), `$XRP` (`69vX…H55E`, $1562M, 100%), and the `$JUP` copycat (`JUPr…cyyG`, $40M, 100%) were picked by the old ticker search. Each has one Raydium CLMM pool that reports a huge depth with almost no 24h volume ($230–$2.2k) and a few dollars on the quote side. That pool's vault held 99% of supply, and the Raydium CLMM program was not on the pool-program list, so the vault was counted as a top-10 holder.
+- `is $JUP safe?` scored the right mint, but DexScreener returned a broken row for pair `3XNG…zNEe` ($965M, price $1656.9). Nothing cross-checked it. RugCheck's total for JUP is about $5.8M.
+- The resolver joined the parent post and the mention, then took the first `$ticker`, so a `$SOL` parent beat a `$JUP?` reply.
+
+What changed:
+
+| Part | Status | Notes |
+| --- | --- | --- |
+| Mention text first | Done | `resolveMentionToken` in `resolver.ts`. The parent post is used only when the mention has no `$ticker` and no mint. A parent with two or more tokens gets `multipleTokensReply`. |
+| Pools that hold the mint | Done | `parseDexTokenResponse` uses only pairs where the mint is base or quote. It ignores unknown DEX ids, $100k+ pools with under 0.1% of that in 24h volume, and pools deeper than FDV (`dex pools ignored` log). Liquidity is the sum of the rest. RugCheck liquidity is no longer a fallback. |
+| Age | Partial | Earliest pool time among pools that hold the mint, or RugCheck's first sighting, whichever is earlier. The mint's first on-chain signature is not read, because paging to it costs too many RPC calls on old mints. |
+| Top 10 | Done | Raydium CLMM, Raydium LaunchLab, Meteora DAMM v2, and Meteora DBC vaults count as pools. RugCheck's top 10 skips its own market accounts. Re-checked live: the three copycats now read 0.01–0.41%, and JUP reads 66.2%. |
+| Plausibility gate | Done | `plausibleSnapshot` in `providers/parse.ts`, run in `LiveTokenDataProvider.getToken`, before the engine. Each drop logs `fact dropped` with a reason. Birdeye's security endpoint has no liquidity, so the cross-check is RugCheck only. |
+| Old checks | Dry run only | `Check.dataVersion` (old rows are 1, new rows are 2). `findReusableCheck` reuses version 2 only. `npm run checks:review` lists flagged checks. With `--apply` it sets them `hidden`, which removes them from the scorecard, reuse, and outcome scoring. The proof and `/r/<id>` stay, with a "Removed from the scorecard" line. `--apply` has not been run. |
+
+Live re-check (`LiveTokenDataProvider.getToken`, no proof, no X): JUP $4.55M liquidity, price $0.36, top 10 66.2%, first pool 2024-01-29. Bonk $1.53M (sum of pools; the old reply used the single deepest pool, $394k), top 10 38.3%. The three copycats: liquidity not verified (pool ignored), top 10 under 0.5%.
+
+Dry run of `npm run checks:review` (11 older live checks reviewed, 5 flagged):
+
+| Check | Token | Level | Reasons |
+| --- | --- | --- | --- |
+| 8rLaGKcU94 | $JUP `JUPy…DvCN` | LOW | $965M liquidity not backed by today's pools ($4.56M) |
+| uiD72UvHDt | $JUP `JUPr…cyyG` | HIGH | not the verified JUP mint; top 10 shown as 100% |
+| h8WbAPHY3D | $XRP `69vX…H55E` | MEDIUM | bare ticker, mint not verified; top 10 100%; liquidity above FDV |
+| gyWUWBt8ig | $NINCHI `m1ms…pump` | HIGH | bare ticker, mint not verified; top 10 100% |
+| QTqaoBJBqC | $SOL `EPPi…SEnj` | MEDIUM | not the verified SOL mint; top 10 shown as 100% |
 
 ## Landing page, 2026-10-08
 

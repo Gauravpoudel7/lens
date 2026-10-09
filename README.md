@@ -175,6 +175,7 @@ Do not commit that drift.
 | `npm run doctor` | Check every setting before going live: X, RPCs, modes, proof wallet balance, session secret, Pro network and USDC mint. Each line names the variable to set. No posts. Add `-- --x` for one `users/me` read |
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
+| `npm run checks:review` | List live checks made before the 2026-10-09 data fixes whose numbers cannot be backed up. Add `-- --apply` to hide them from the scorecard (proofs and report links stay) |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
 | `npm run lint` | Lint the website |
 | `npm run typecheck` | Typecheck the bot packages. The Next apps are typechecked by their builds |
@@ -282,7 +283,13 @@ The level is computed in `packages/core/src/risk/engine.ts`. Danger is worth 3, 
 - **MEDIUM** if there is 1 danger, or 2 cautions, or at least 4 checks came back unknown, or mint authority or freeze authority could not be read (a LOW with missing data is not treated as a clean pass).
 - **LOW** otherwise. A permanent delegate or a transfer fee of 5% or more cannot be LOW.
 
-Thresholds: age under 24 hours is danger, under 7 days is caution. Liquidity under $10k is danger (caution if it is locked). $10k–$50k is caution. $50k+ and unlocked is caution. Top 10 holders at 70%+ is danger, 50%+ is caution. That top 10 skips burn addresses, Raydium’s AMM authority, and any holder whose owning program is Raydium, Orca Whirlpool, Meteora, or pump.fun. Other holders stay in the count. Creator sold 40%+ is danger, 10%+ is caution. Mint or freeze authority still on is danger. Token-2022: a permanent delegate or accounts that start frozen is danger. A transfer fee of 5% or more is danger. A smaller fee, a transfer hook, or a non-transferable flag is caution. Linked launch wallets at 30%+ is danger, 15%+ is caution. A “locked” claim that the chain contradicts is danger. A “burned” claim is danger only when the chain shows a burn that is real but under 10%. A missing burn sample, or a zero burn, is “could not be verified,” not danger.
+Thresholds: age under 24 hours is danger, under 7 days is caution. Liquidity under $10k is danger (caution if it is locked). $10k–$50k is caution. $50k+ and unlocked is caution. Top 10 holders at 70%+ is danger, 50%+ is caution. That top 10 skips burn addresses, Raydium’s AMM authority, and any holder whose owning program is a known pool program (Raydium v4, CPMM, CLMM, LaunchLab, Orca Whirlpool, Meteora DLMM, pools, DAMM v2, DBC, or pump.fun). RugCheck's fallback top 10 also skips the market accounts in its own report. Other holders stay in the count. Creator sold 40%+ is danger, 10%+ is caution. Mint or freeze authority still on is danger. Token-2022: a permanent delegate or accounts that start frozen is danger. A transfer fee of 5% or more is danger. A smaller fee, a transfer hook, or a non-transferable flag is caution. Linked launch wallets at 30%+ is danger, 15%+ is caution. A “locked” claim that the chain contradicts is danger. A “burned” claim is danger only when the chain shows a burn that is real but under 10%. A missing burn sample, or a zero burn, is “could not be verified,” not danger.
+
+### Where the numbers come from
+
+Liquidity is the sum of DexScreener pools on Solana where the mint is the base or quote token. A pool is ignored when its DEX id is not a known Solana DEX, when it reports $100k or more but traded under 0.1% of that in 24 hours, or when it is deeper than the token's FDV. RugCheck's total is only a cross-check. Pool age comes only from pools that hold the mint, and the age is the earlier of that and RugCheck's first sighting.
+
+Before the rules run, a number that fails a plausibility check is removed and logged (`fact dropped`): liquidity that RugCheck disagrees with by more than 10x, or liquidity above FDV; a price 10x away from RugCheck's; an age under one day for a Jupiter-verified mint; a top 10 of 99% or more next to $100k or more of liquidity. A removed number is “could not be verified” on the report and is left off the X reply.
 
 Known stake-pool receipt mints (JitoSOL, mSOL, bSOL, jupSOL, INF) are matched by mint address. An enabled mint authority on those mints, or a mint authority that is a stake-pool program, is noted as “stake-pool token” and is not a danger sign. A different mint that only copies the ticker is still scored normally.
 
@@ -290,7 +297,7 @@ Unknown creator sells do not count as danger. That figure is filled only when Bi
 
 ### Tickers
 
-A contract address is scored as that mint. A `$ticker` is scored only when Jupiter’s verified token list has exactly one token for the symbol (`GET /tokens/v2/tag?query=verified`, no key). If none match, or several do, Lens asks for the contract address and does not pick a pool by liquidity.
+A mention is read from the asker's own text first. The parent post is used only when the mention has no `$ticker` and no contract address. If the parent names two or more tokens, Lens asks which one. A contract address is scored as that mint. A `$ticker` is scored only when Jupiter’s verified token list has exactly one token for the symbol (`GET /tokens/v2/tag?query=verified`, no key). If none match, or several do, Lens asks for the contract address and does not pick a pool by liquidity.
 
 `$BTC`, `$ETH`, `$XRP`, and the other non-Solana majors in `packages/core/src/tickers.ts` get a short notice instead of a risk level. `$SOL` is the native asset and is not scored. `$USDC` and `$USDT` name the canonical Solana mint (Circle and Tether) and are not scored, because those tokens keep freeze authority on and the rules would call that danger. `$WBTC`, `$WETH`, and `$WBNB` are the same kind of notice. Paste the mint to check a specific token, including a wrapped one or a copy.
 
