@@ -47,9 +47,12 @@ export interface DexSummary {
   symbol: string;
   name: string;
   priceUsd: number | null;
+  /** Sum of the pools that contain the mint and look real. Null when none do. */
   liquidityUsd: number | null;
+  fdvUsd: number | null;
   createdAt: string | null;
   url: string | null;
+  ignoredPools: Array<{ pair: string; reason: string }>;
 }
 
 export interface ChainSummary {
@@ -218,33 +221,106 @@ function ratioPct(part: bigint, whole: bigint): number {
   return Number((part * 10_000n) / whole) / 100;
 }
 
+/**
+ * Solana DEX ids as DexScreener spells them. A pool on any other id is ignored.
+ * ponytail: fixed allowlist. Add an id when the "dex pools ignored" log shows a real DEX.
+ */
+const KNOWN_DEX_IDS = new Set([
+  "crema",
+  "fluxbeam",
+  "invariant",
+  "launchlab",
+  "lifinity",
+  "meteora",
+  "meteoradbc",
+  "openbook",
+  "orca",
+  "pancakeswap",
+  "phoenix",
+  "pumpfun",
+  "pumpswap",
+  "raydium",
+  "saber",
+  "solfi",
+  "stabble",
+]);
+
+/** A pool this deep with almost no trading is a reported number, not real depth. */
+const FAKE_POOL_MIN_USD = 100_000;
+const FAKE_POOL_MIN_VOLUME_RATIO = 0.001;
+/** Solana mainnet beta launched 2020-03-16. An earlier pool time is a bad field. */
+const SOLANA_GENESIS_MS = Date.parse("2020-03-16T00:00:00.000Z");
+
+type DexPair = Record<string, unknown>;
+
+/**
+ * Only pools where the mint is the base or quote token count. Liquidity is the
+ * sum of those pools after fake-looking ones are dropped. Price and FDV come
+ * from the deepest kept pool where the mint is the base token.
+ */
 export function parseDexTokenResponse(mint: string, body: unknown): DexSummary | null {
   const pairs = Array.isArray((body as { pairs?: unknown }).pairs)
-    ? ((body as { pairs: unknown[] }).pairs as Array<Record<string, unknown>>)
+    ? ((body as { pairs: unknown[] }).pairs as DexPair[])
     : [];
-  const solana = pairs.filter((pair) => pair.chainId === "solana");
-  const matched = solana.filter((pair) => {
-    const base = pair.baseToken as { address?: string } | undefined;
-    return base?.address === mint;
+  const withMint = pairs.filter(
+    (pair) => pair.chainId === "solana" && (sideOf(pair, mint) === "base" || sideOf(pair, mint) === "quote"),
+  );
+  if (withMint.length === 0) return null;
+  const ignoredPools: DexSummary["ignoredPools"] = [];
+  const kept = withMint.filter((pair) => {
+    const reason = fakePoolReason(pair, mint);
+    if (reason) ignoredPools.push({ pair: pairLabel(pair), reason });
+    return !reason;
   });
-  const usable = matched.length > 0 ? matched : solana;
-  if (usable.length === 0) return null;
-  const best = [...usable].sort((a, b) => liquidityOf(b) - liquidityOf(a))[0]!;
-  const created = usable
+  const byDepth = (a: DexPair, b: DexPair) => liquidityOf(b) - liquidityOf(a);
+  const best = kept.filter((pair) => sideOf(pair, mint) === "base").sort(byDepth)[0] ?? null;
+  const shown = best ?? [...kept].sort(byDepth)[0] ?? withMint[0]!;
+  const token = (sideOf(shown, mint) === "base" ? shown.baseToken : shown.quoteToken) as {
+    symbol?: string;
+    name?: string;
+  };
+  const total = kept.reduce((sum, pair) => sum + liquidityOf(pair), 0);
+  const created = withMint
     .map((pair) => (typeof pair.pairCreatedAt === "number" ? pair.pairCreatedAt : null))
-    .filter((value): value is number => value != null);
-  const base = best.baseToken as { symbol?: string; name?: string };
+    .filter((value): value is number => value != null && value >= SOLANA_GENESIS_MS);
   return {
-    symbol: base.symbol || "UNKNOWN",
-    name: base.name || base.symbol || "Unknown token",
-    priceUsd: numberOrNull(best.priceUsd),
-    liquidityUsd: liquidityOf(best) || null,
+    symbol: token.symbol || "UNKNOWN",
+    name: token.name || token.symbol || "Unknown token",
+    priceUsd: best ? numberOrNull(best.priceUsd) : null,
+    liquidityUsd: total > 0 ? total : null,
+    fdvUsd: best ? (numberOrNull(best.fdv) ?? numberOrNull(best.marketCap)) : null,
     createdAt: created.length ? new Date(Math.min(...created)).toISOString() : null,
-    url: typeof best.url === "string" ? best.url : null,
+    url: typeof shown.url === "string" ? shown.url : null,
+    ignoredPools,
   };
 }
 
-function liquidityOf(pair: Record<string, unknown>): number {
+function sideOf(pair: DexPair, mint: string): "base" | "quote" | null {
+  if ((pair.baseToken as { address?: string } | undefined)?.address === mint) return "base";
+  if ((pair.quoteToken as { address?: string } | undefined)?.address === mint) return "quote";
+  return null;
+}
+
+function fakePoolReason(pair: DexPair, mint: string): string | null {
+  const dexId = typeof pair.dexId === "string" ? pair.dexId : "";
+  if (!KNOWN_DEX_IDS.has(dexId)) return `unknown dex "${dexId || "none"}"`;
+  const liquidity = liquidityOf(pair);
+  const volume = numberOrZero((pair.volume as { h24?: unknown } | undefined)?.h24);
+  if (liquidity >= FAKE_POOL_MIN_USD && volume < liquidity * FAKE_POOL_MIN_VOLUME_RATIO) {
+    return "24h volume too low for its liquidity";
+  }
+  const fdv = numberOrNull(pair.fdv) ?? numberOrNull(pair.marketCap);
+  if (sideOf(pair, mint) === "base" && fdv != null && fdv > 0 && liquidity > fdv) {
+    return "liquidity above the token's FDV";
+  }
+  return null;
+}
+
+function pairLabel(pair: DexPair): string {
+  return typeof pair.pairAddress === "string" ? pair.pairAddress : typeof pair.url === "string" ? pair.url : "unknown";
+}
+
+function liquidityOf(pair: DexPair): number {
   const liquidity = pair.liquidity as { usd?: number } | undefined;
   return typeof liquidity?.usd === "number" ? liquidity.usd : 0;
 }
@@ -524,7 +600,9 @@ export function mergeTokenData(input: {
     decimals: chain?.decimals ?? 0,
     createdAt: createdCandidates.length ? new Date(Math.min(...createdCandidates)).toISOString() : null,
     priceUsd: dex?.priceUsd ?? rug?.priceUsd ?? null,
-    liquidityUsd: dex?.liquidityUsd ?? rug?.liquidityUsd ?? null,
+    // DexScreener pools only. RugCheck's total is a cross-check (see plausibleSnapshot), not a fallback.
+    liquidityUsd: dex?.liquidityUsd ?? null,
+    fdvUsd: dex?.fdvUsd ?? null,
     lpLocked: birdeye?.lpLocked ?? rug?.lpLocked ?? null,
     top10HolderPct: chain?.top10HolderPct ?? birdeye?.top10HolderPct ?? rug?.top10HolderPct ?? null,
     creatorWallet: rug?.creatorWallet ?? birdeye?.creatorWallet ?? null,

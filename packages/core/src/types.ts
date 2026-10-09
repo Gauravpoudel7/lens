@@ -39,6 +39,8 @@ export interface TokenSnapshot {
   createdAt: string | null;
   priceUsd: number | null;
   liquidityUsd: number | null;
+  /** Fully diluted value from the deepest real pool. Absent on older snapshots. */
+  fdvUsd?: number | null;
   lpLocked: boolean | null;
   top10HolderPct: number | null;
   creatorWallet: string | null;

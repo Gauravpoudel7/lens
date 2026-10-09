@@ -12,8 +12,11 @@ import {
   parseJupiterVerifiedTokens,
   parseMintAccount,
   parseMintExtensions,
+  mergeTokenData,
   parseRugcheckReport,
 } from "./parse.js";
+import { evaluateRisk, snapshotToRuleInput } from "../risk/engine.js";
+import { buildTemplateReply } from "../reply/policy.js";
 
 describe("live data parsers", () => {
   it("reads mint and freeze authority from an SPL mint account", () => {
@@ -94,11 +97,12 @@ describe("live data parsers", () => {
     expect(classifyMintAccount({ owner: SPL_TOKEN_PROGRAM_ID, data: [encoded, "base64"] }).kind).toBe("mint");
   });
 
-  it("picks the deepest Solana pair and the earliest pool time", () => {
+  it("sums the mint's Solana pools, prices from the deepest, and takes the earliest pool time", () => {
     const summary = parseDexTokenResponse("Mint111", {
       pairs: [
         {
           chainId: "solana",
+          dexId: "raydium",
           url: "https://dexscreener.com/solana/new",
           baseToken: { address: "Mint111", symbol: "NEW", name: "New" },
           priceUsd: "0.2",
@@ -107,6 +111,7 @@ describe("live data parsers", () => {
         },
         {
           chainId: "solana",
+          dexId: "orca",
           url: "https://dexscreener.com/solana/deep",
           baseToken: { address: "Mint111", symbol: "NEW", name: "New" },
           priceUsd: "0.25",
@@ -117,8 +122,128 @@ describe("live data parsers", () => {
       ],
     });
     expect(summary?.priceUsd).toBe(0.25);
-    expect(summary?.liquidityUsd).toBe(9000);
+    expect(summary?.liquidityUsd).toBe(9050);
     expect(summary?.createdAt).toBe(new Date(1_700_000_000_000).toISOString());
+  });
+
+  it("does not post a fake $900M pool that sits next to the real pools", () => {
+    const jup = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+    const token = { address: jup, symbol: "JUP", name: "Jupiter" };
+    const sol = { address: "So11111111111111111111111111111111111111112", symbol: "SOL", name: "Wrapped SOL" };
+    const dex = parseDexTokenResponse(jup, {
+      pairs: [
+        {
+          chainId: "solana",
+          dexId: "meteora",
+          pairAddress: "FakePool",
+          baseToken: token,
+          quoteToken: sol,
+          priceUsd: "1656.9",
+          liquidity: { usd: 900_000_000 },
+          volume: { h24: 1_200 },
+          fdv: 11_000_000_000,
+          pairCreatedAt: Date.parse("2025-10-25T00:00:00Z"),
+        },
+        {
+          chainId: "solana",
+          dexId: "meteora",
+          pairAddress: "RealPool",
+          baseToken: token,
+          quoteToken: sol,
+          priceUsd: "0.3625",
+          liquidity: { usd: 2_000_000 },
+          volume: { h24: 5_800_000 },
+          fdv: 2_500_000_000,
+          pairCreatedAt: Date.parse("2024-01-31T00:00:00Z"),
+        },
+        {
+          chainId: "solana",
+          dexId: "orca",
+          pairAddress: "SecondPool",
+          baseToken: token,
+          quoteToken: sol,
+          priceUsd: "0.3624",
+          liquidity: { usd: 300_000 },
+          volume: { h24: 600_000 },
+          fdv: 2_500_000_000,
+          pairCreatedAt: Date.parse("2024-01-29T00:00:00Z"),
+        },
+      ],
+    });
+    expect(dex?.ignoredPools).toEqual([{ pair: "FakePool", reason: "24h volume too low for its liquidity" }]);
+    expect(dex?.liquidityUsd).toBe(2_300_000);
+    expect(dex?.priceUsd).toBe(0.3625);
+    const snapshot = mergeTokenData({ mint: jup, dex, rug: null, chain: null, birdeye: null })!;
+    const now = new Date("2026-10-08T00:00:00Z");
+    const report = evaluateRisk(snapshotToRuleInput(snapshot, { burned: false, locked: false }, now), snapshot.links);
+    const reply = buildTemplateReply({
+      riskLevel: report.level,
+      symbol: snapshot.symbol,
+      name: snapshot.name,
+      mint: jup,
+      facts: report.facts,
+      reportUrl: "https://example.com/r/x",
+    });
+    expect(reply).not.toContain("900M");
+    expect(reply).not.toContain("$900");
+    expect(reply).toContain("Liquidity is $2.3M");
+  });
+
+  it("never uses pools that do not contain the mint", () => {
+    const summary = parseDexTokenResponse("Mint111", {
+      pairs: [
+        {
+          chainId: "solana",
+          dexId: "raydium",
+          baseToken: { address: "Other111", symbol: "OTH" },
+          quoteToken: { address: "So11111111111111111111111111111111111111112", symbol: "SOL" },
+          liquidity: { usd: 5_000_000 },
+          volume: { h24: 9_000_000 },
+          pairCreatedAt: 1_600_000_000_000,
+        },
+      ],
+    });
+    expect(summary).toBeNull();
+    const merged = mergeTokenData({
+      mint: "Mint111",
+      dex: summary,
+      rug: { ...emptyRug(), liquidityUsd: 2_500_000_000 },
+      chain: null,
+      birdeye: null,
+    });
+    expect(merged?.liquidityUsd).toBeNull();
+    expect(merged?.createdAt).toBeNull();
+  });
+
+  it("counts a pool where the mint is the quote token, but takes no price from it", () => {
+    const summary = parseDexTokenResponse("Mint111", {
+      pairs: [
+        {
+          chainId: "solana",
+          dexId: "meteora",
+          baseToken: { address: "Other111", symbol: "MET", name: "Meteora" },
+          quoteToken: { address: "Mint111", symbol: "JUP", name: "Jupiter" },
+          priceUsd: "0.42",
+          liquidity: { usd: 214_000 },
+          volume: { h24: 25_000_000 },
+          pairCreatedAt: 1_761_396_180_000,
+        },
+      ],
+    });
+    expect(summary).toMatchObject({ symbol: "JUP", name: "Jupiter", liquidityUsd: 214_000, priceUsd: null, fdvUsd: null });
+  });
+
+  it("ignores pools on an unknown DEX and pools deeper than the token's FDV", () => {
+    const base = { address: "Mint111", symbol: "NEW", name: "New" };
+    const summary = parseDexTokenResponse("Mint111", {
+      pairs: [
+        { chainId: "solana", dexId: "mysteryswap", pairAddress: "A", baseToken: base, liquidity: { usd: 5_000 }, volume: { h24: 9_000 } },
+        { chainId: "solana", dexId: "raydium", pairAddress: "B", baseToken: base, liquidity: { usd: 50_000 }, volume: { h24: 9_000 }, fdv: 40_000 },
+        { chainId: "solana", dexId: "raydium", pairAddress: "C", baseToken: base, liquidity: { usd: 20_000 }, volume: { h24: 9_000 }, fdv: 90_000 },
+      ],
+    });
+    expect(summary?.liquidityUsd).toBe(20_000);
+    expect(summary?.ignoredPools.map((pool) => pool.pair)).toEqual(["A", "B"]);
   });
 
   it("keeps one verified ticker and drops a higher-liquidity copycat", () => {
@@ -244,3 +369,27 @@ describe("live data parsers", () => {
     expect(summary?.transferFeeBps).toBe(800);
   });
 });
+
+function emptyRug() {
+  return {
+    symbol: null,
+    name: null,
+    detectedAt: null,
+    mintAuthorityActive: null,
+    freezeAuthorityActive: null,
+    top10HolderPct: null,
+    burnedPct: null,
+    creatorWallet: null,
+    creatorBalancePct: null,
+    sniperPct: null,
+    lpLocked: null,
+    priceUsd: null,
+    liquidityUsd: null,
+    permanentDelegate: null,
+    transferFeeBps: null,
+    transferFeeUnsized: null,
+    transferHook: null,
+    defaultFrozen: null,
+    nonTransferable: null,
+  };
+}

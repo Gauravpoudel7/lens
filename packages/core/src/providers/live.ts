@@ -106,7 +106,11 @@ export class LiveTokenDataProvider implements TokenDataProvider {
         undefined,
         this.attempts(),
       );
-      return parseDexTokenResponse(mint, body);
+      const summary = parseDexTokenResponse(mint, body);
+      if (summary?.ignoredPools.length) {
+        log("dex pools ignored", { mint, pools: summary.ignoredPools.slice(0, 5), count: summary.ignoredPools.length });
+      }
+      return summary;
     } catch (err) {
       log("DexScreener token failed", err instanceof Error ? err.message : err);
       return null;
