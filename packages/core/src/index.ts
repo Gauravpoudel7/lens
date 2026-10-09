@@ -29,6 +29,7 @@ export * from "./store/types.js";
 export * from "./store/memory.js";
 export * from "./outcomes.js";
 export * from "./pipeline.js";
+export * from "./review.js";
 export * from "./poll.js";
 export * from "./blink.js";
 export * from "./swap.js";

@@ -87,6 +87,13 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         {check.askedBy ? ` · @${check.askedBy}` : ""}
       </p>
 
+      {check.status === "hidden" ? (
+        <p className="mt-5 rounded-2xl border border-line bg-panel px-5 py-4 text-base leading-7 text-muted" role="note">
+          Removed from the scorecard. A later data review found numbers in this check that could not be backed up.
+          The proof below is unchanged.
+        </p>
+      ) : null}
+
       <section className={`verdict-reveal mt-5 rounded-2xl border-l-4 ${tone} px-5 py-5 sm:px-6`}>
         {unscored ? (
           <>

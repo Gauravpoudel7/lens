@@ -24,6 +24,7 @@
     "doctor": "tsx scripts/doctor.ts",
     "post": "tsx scripts/post.ts",
     "score": "tsx scripts/score.ts",
+    "checks:review": "tsx scripts/review-checks.ts",
     "test": "vitest run",
     "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/db --noEmit && tsc -p apps/worker --noEmit && tsc -p apps/web --noEmit && tsc -p apps/landing --noEmit",
     "db:push": "tsx scripts/ensure-db.ts",

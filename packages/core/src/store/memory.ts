@@ -1,6 +1,6 @@
 import { newId } from "../ids.js";
 import { isActivePro, normalizeHandle, type AlertRecord, type LinkCodeRecord, type PaymentRecord, type UserRecord, type WatchRecord } from "../accounts.js";
-import type { CheckRecord, MentionRecord, OutcomeRecord } from "../types.js";
+import { CHECK_DATA_VERSION, type CheckRecord, type MentionRecord, type OutcomeRecord } from "../types.js";
 import type { LensStore } from "./types.js";
 
 function clone<T>(value: T): T {
@@ -64,7 +64,7 @@ export class MemoryStore implements LensStore {
     const limit = opts?.limit ?? 500;
     const kinds = opts?.kinds ? new Set(opts.kinds) : null;
     return [...this.checks.values()]
-      .filter((check) => !kinds || kinds.has(check.kind))
+      .filter((check) => check.status !== "hidden" && (!kinds || kinds.has(check.kind)))
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .slice(0, limit)
       .map(clone);
@@ -77,6 +77,7 @@ export class MemoryStore implements LensStore {
           check.parentPostId === parentPostId &&
           check.tokenMint === mint &&
           (check.status === "published" || check.status === "reply_failed") &&
+          (check.dataVersion ?? 1) >= CHECK_DATA_VERSION &&
           check.replyText.length > 0 &&
           check.proof?.txSignature,
       )

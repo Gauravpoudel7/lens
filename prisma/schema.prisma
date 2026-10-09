@@ -48,6 +48,8 @@ model Check {
   status         String
   error          String?
   xPostId        String?
+  /// 1 = before the 2026-10-09 reply data fixes. Reuse needs the current version.
+  dataVersion    Int       @default(1)
   createdAt      DateTime  @default(now())
   proof          Proof?
   outcome        Outcome?

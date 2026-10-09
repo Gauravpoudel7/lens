@@ -279,7 +279,7 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     return this.config.rpcRetryAttempts ?? 4;
   }
 
-  private async isVerifiedMint(mint: string): Promise<boolean> {
+  async isVerifiedMint(mint: string): Promise<boolean> {
     try {
       return (await this.verifiedIndex()).mints.has(mint);
     } catch {

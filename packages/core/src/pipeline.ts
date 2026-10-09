@@ -13,6 +13,7 @@ import type { TokenDataProvider } from "./providers/types.js";
 import { resolveMentionToken, resolveToken } from "./resolver.js";
 import { decideSwapLink, replyHasSwapLink, wantsTradeLink } from "./swap.js";
 import type { LensStore } from "./store/types.js";
+import { CHECK_DATA_VERSION } from "./types.js";
 import type {
   CheckKind,
   CheckRecord,
@@ -435,6 +436,7 @@ async function createUnresolvedCheck(
     status: "published",
     error: null,
     xPostId: null,
+    dataVersion: CHECK_DATA_VERSION,
     createdAt: now.toISOString(),
     proof: proofRecord(proof, published, now),
     outcome: null,
@@ -490,6 +492,7 @@ function buildCheck(input: {
     status: "published",
     error: null,
     xPostId: null,
+    dataVersion: CHECK_DATA_VERSION,
     createdAt: input.now.toISOString(),
     proof: proofRecord(input.proof, input.published, input.signedAt),
     outcome: null,

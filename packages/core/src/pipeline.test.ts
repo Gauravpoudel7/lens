@@ -13,6 +13,7 @@ import { scoreDueChecks } from "./outcomes.js";
 import { MockXClient } from "./x/mock.js";
 import { issueOrReuseLinkCode } from "./billing/link.js";
 import type { XPost } from "./x/types.js";
+import { CHECK_DATA_VERSION } from "./types.js";
 
 function deps(
   rateLimit = 5,
@@ -162,6 +163,57 @@ describe("mention pipeline", () => {
     expect(second.replyText).toBe(first.replyText);
     expect([...store.checks.values()]).toHaveLength(1);
     expect(x.replies).toHaveLength(2);
+  });
+
+  it("saves new checks at the current data version and does not reuse an older one", async () => {
+    const { rt, x, store } = deps();
+    x.seed(parent());
+    const first = await processMention(rt, {
+      id: "mention_v1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is this legit?",
+      parentId: "parent_1",
+    });
+    if (first.status !== "replied") throw new Error(first.status);
+    const saved = await store.getCheck(first.checkId);
+    expect(saved?.dataVersion).toBe(CHECK_DATA_VERSION);
+    await store.saveCheck({ ...saved!, dataVersion: 1 });
+    const second = await processMention(rt, {
+      id: "mention_v2",
+      authorId: "user_2",
+      authorUsername: "other",
+      text: "@justasklens thoughts?",
+      parentId: "parent_1",
+    });
+    if (second.status !== "replied") throw new Error(second.status);
+    expect(second.cached).toBe(false);
+    expect(second.checkId).not.toBe(first.checkId);
+  });
+
+  it("keeps a hidden check off the scorecard list and out of reuse, but still loads it by id", async () => {
+    const { rt, x, store } = deps();
+    x.seed(parent());
+    const first = await processMention(rt, {
+      id: "mention_h1",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens is this legit?",
+      parentId: "parent_1",
+    });
+    if (first.status !== "replied") throw new Error(first.status);
+    await store.updateCheck(first.checkId, { status: "hidden", error: "Hidden by data review: test" });
+    expect((await store.listChecks()).map((check) => check.id)).not.toContain(first.checkId);
+    expect((await store.getCheck(first.checkId))?.proof?.txSignature).toBeTruthy();
+    const second = await processMention(rt, {
+      id: "mention_h2",
+      authorId: "user_2",
+      authorUsername: "other",
+      text: "@justasklens thoughts?",
+      parentId: "parent_1",
+    });
+    if (second.status !== "replied") throw new Error(second.status);
+    expect(second.cached).toBe(false);
   });
 
   it("stops a user who is over the daily limit before a new proof", async () => {

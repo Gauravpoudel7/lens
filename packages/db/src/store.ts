@@ -1,4 +1,5 @@
 import {
+  CHECK_DATA_VERSION,
   newId,
   normalizeHandle,
   type AlertRecord,
@@ -40,6 +41,7 @@ type CheckRow = {
   status: string;
   error: string | null;
   xPostId: string | null;
+  dataVersion: number;
   createdAt: Date;
   proof: {
     contentHash: string;
@@ -95,6 +97,7 @@ function toCheck(row: CheckRow): CheckRecord {
     status: row.status as CheckRecord["status"],
     error: row.error,
     xPostId: row.xPostId,
+    dataVersion: row.dataVersion,
     createdAt: row.createdAt.toISOString(),
     proof: row.proof
       ? {
@@ -188,6 +191,7 @@ export function createPrismaStore(): LensStore {
           status: check.status,
           error: check.error,
           xPostId: check.xPostId,
+          dataVersion: check.dataVersion ?? 1,
           createdAt: new Date(check.createdAt),
           proof: check.proof
             ? {
@@ -215,7 +219,10 @@ export function createPrismaStore(): LensStore {
     },
     async listChecks(opts) {
       const rows = await prisma.check.findMany({
-        where: opts?.kinds?.length ? { kind: { in: opts.kinds } } : undefined,
+        where: {
+          status: { not: "hidden" },
+          ...(opts?.kinds?.length ? { kind: { in: opts.kinds } } : {}),
+        },
         include,
         orderBy: { createdAt: "desc" },
         take: opts?.limit ?? 500,
@@ -228,6 +235,7 @@ export function createPrismaStore(): LensStore {
           parentPostId,
           tokenMint: mint,
           status: { in: ["published", "reply_failed"] },
+          dataVersion: { gte: CHECK_DATA_VERSION },
           proof: { isNot: null },
         },
         include,

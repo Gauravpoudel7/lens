@@ -101,6 +101,12 @@ export interface OutcomeRecord {
   scoredAt: string;
 }
 
+/**
+ * Bump when a data rule change means older checks should not be reused.
+ * 2: real-pool liquidity, CLMM vaults as pools, plausibility gate (2026-10-09).
+ */
+export const CHECK_DATA_VERSION = 2;
+
 export interface CheckRecord {
   id: string;
   kind: CheckKind;
@@ -123,9 +129,12 @@ export interface CheckRecord {
   sourcePostText: string | null;
   priceAtCheck: number | null;
   askedBy: string | null;
-  status: "published" | "reply_failed";
+  /** `hidden` keeps the proof and report link but leaves the check off the public scorecard. */
+  status: "published" | "reply_failed" | "hidden";
   error: string | null;
   xPostId: string | null;
+  /** Data rules the check was made under. Absent or 1 means before the 2026-10-09 fixes. */
+  dataVersion?: number;
   createdAt: string;
   proof: ProofRecord | null;
   outcome: OutcomeRecord | null;
