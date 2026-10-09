@@ -17,8 +17,9 @@ export const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuE
  * Two checks, and only those:
  * 1. The token-account authority is Raydium AMM v4's well-known authority.
  * 2. The account that owns that authority is a known AMM or pump.fun program
- *    (Raydium v4, Raydium CPMM, Orca Whirlpool, Meteora DLMM, Meteora pools,
- *    pump.fun, pump.fun AMM). The live reader fills `ownerProgram` from that
+ *    (Raydium v4, Raydium CPMM, Raydium CLMM, Raydium LaunchLab, Orca Whirlpool,
+ *    Meteora DLMM, Meteora pools, Meteora DAMM v2, Meteora DBC, pump.fun,
+ *    pump.fun AMM). The live reader fills `ownerProgram` from that
  *    account's program id. Owners we cannot identify stay in the top 10.
  */
 export const RAYDIUM_AMM_AUTHORITY = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1";
@@ -26,9 +27,13 @@ export const RAYDIUM_AMM_AUTHORITY = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4
 export const AMM_PROGRAM_IDS = new Set([
   "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
   "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+  "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+  "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj",
   "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
   "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
   "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",
+  "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+  "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
   "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
   "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
 ]);

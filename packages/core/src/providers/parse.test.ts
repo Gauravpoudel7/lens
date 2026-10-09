@@ -55,6 +55,19 @@ describe("live data parsers", () => {
     expect(stats.top10HolderPct).toBe(10);
   });
 
+  it("leaves a Raydium CLMM pool vault out of the top 10 (the $SOL, $XRP, and $JUP copycat replies said 100%)", () => {
+    // Pool state Ln7PKz… of the 2026-10-07 $SOL copycat is owned by the Raydium CLMM program.
+    const stats = holderStats(20_999_999_000_000n, [
+      {
+        amount: 20_999_000_000_000n,
+        owner: "Ln7PKzCimfAQS24SZMSsWSpKyJdh9J2covX5uBG6tyr",
+        ownerProgram: "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+      },
+      { amount: 999_000_000n, owner: new PublicKey(Buffer.alloc(32, 5)).toBase58() },
+    ]);
+    expect(stats.top10HolderPct).toBe(0);
+  });
+
   it("reads Token-2022 traps from mint extension bytes", () => {
     const delegate = Keypair.generate().publicKey;
     const hook = Keypair.generate().publicKey;
