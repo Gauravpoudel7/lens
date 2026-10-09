@@ -1,6 +1,6 @@
-# Lens (@askLens)
+# Lens (@justasklens)
 
-Lens is a Solana risk bot for X. Someone tags `@askLens` under a post. Lens finds the token, runs a fixed set of on-chain checks, and replies with **LOW**, **MEDIUM**, or **HIGH** plus plain-English facts. Before that reply is posted, Lens writes the SHA-256 of the exact text and a timestamp to Solana, so the record cannot be quietly edited later. A public scorecard shows every check, the call win rate, and whether the risk labels held up.
+Lens is a Solana risk bot for X. Someone tags `@justasklens` under a post. Lens finds the token, runs a fixed set of on-chain checks, and replies with **LOW**, **MEDIUM**, or **HIGH** plus plain-English facts. Before that reply is posted, Lens writes the SHA-256 of the exact text and a timestamp to Solana, so the record cannot be quietly edited later. A public scorecard shows every check, the call win rate, and whether the risk labels held up.
 
 LOW means no major red flags were found. It is not a prediction that the price will rise. Replies state facts, never the word “scam”, and always end with “Not financial advice.”
 

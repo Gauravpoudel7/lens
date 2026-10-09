@@ -12,7 +12,7 @@ export class MockXClient implements XClient {
 
   seed(post: XPost): void {
     this.posts.set(post.id, post);
-    if (post.text.includes("@askLens") || post.text.includes("@AskLens")) {
+    if (post.text.toLowerCase().includes("@justasklens")) {
       this.mentions.push(post);
     }
   }
@@ -37,7 +37,7 @@ export class MockXClient implements XClient {
     const post: XPost = {
       id,
       authorId: "lens",
-      authorUsername: "askLens",
+      authorUsername: "justasklens",
       text,
       parentId: null,
       createdAt: new Date().toISOString(),

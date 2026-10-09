@@ -41,7 +41,7 @@ describe("token resolver", () => {
 
   it("resolves a verified ticker when no address is present", async () => {
     const provider = new MockTokenDataProvider();
-    const resolved = await resolveToken("@askLens is this legit? $safe", provider);
+    const resolved = await resolveToken("@justasklens is this legit? $safe", provider);
     expect(resolved).toMatchObject({
       status: "token",
       mint: FIXTURES.safe.mint,
@@ -135,6 +135,6 @@ describe("token resolver", () => {
       "Token program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA and memo MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
     );
     expect(found.mints).toEqual([]);
-    expect(await resolveToken("@askLens is this legit?", provider)).toBeNull();
+    expect(await resolveToken("@justasklens is this legit?", provider)).toBeNull();
   });
 });

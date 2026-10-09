@@ -83,7 +83,7 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: "@askLens is this legit?",
+      text: "@justasklens is this legit?",
       parentId: "parent_1",
     });
 
@@ -119,7 +119,7 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: "@askLens is this legit?",
+      text: "@justasklens is this legit?",
       parentId: "parent_1",
     });
     expect(first.status).toBe("replied");
@@ -129,7 +129,7 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: "@askLens is this legit?",
+      text: "@justasklens is this legit?",
       parentId: "parent_1",
     });
     expect(second.status).toBe("already_done");
@@ -144,14 +144,14 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: "@askLens is this legit?",
+      text: "@justasklens is this legit?",
       parentId: "parent_1",
     });
     const second = await processMention(rt, {
       id: "mention_2",
       authorId: "user_2",
       authorUsername: "other",
-      text: "@askLens thoughts?",
+      text: "@justasklens thoughts?",
       parentId: "parent_1",
     });
     expect(first.status).toBe("replied");
@@ -171,13 +171,13 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: `@askLens ${FIXTURES.danger.mint}`,
+      text: `@justasklens ${FIXTURES.danger.mint}`,
     });
     const limited = await processMention(rt, {
       id: "mention_2",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: `@askLens ${FIXTURES.safe.mint}`,
+      text: `@justasklens ${FIXTURES.safe.mint}`,
     });
     expect(ok.status).toBe("replied");
     expect(limited.status).toBe("rate_limited");
@@ -193,13 +193,13 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: `@askLens ${FIXTURES.danger.mint}`,
+      text: `@justasklens ${FIXTURES.danger.mint}`,
     });
     const second = await processMention(rt, {
       id: "mention_2",
       authorId: "user_2",
       authorUsername: "pro_user",
-      text: `@askLens ${FIXTURES.safe.mint}`,
+      text: `@justasklens ${FIXTURES.safe.mint}`,
     });
     expect(first.status).toBe("replied");
     expect(second.status).toBe("rate_limited");
@@ -212,8 +212,8 @@ describe("mention pipeline", () => {
     const { rt, store } = deps(1);
     const user = await rt.store.upsertUser({ xHandle: "trader_joe", wallet: "wallet" });
     await rt.store.setProUntil(user.id, "2099-01-01T00:00:00.000Z");
-    const first = await processMention(rt, { id: "m_unlinked_1", authorId: "user_1", authorUsername: "trader_joe", text: `@askLens ${FIXTURES.danger.mint}` });
-    const second = await processMention(rt, { id: "m_unlinked_2", authorId: "user_1", authorUsername: "trader_joe", text: `@askLens ${FIXTURES.safe.mint}` });
+    const first = await processMention(rt, { id: "m_unlinked_1", authorId: "user_1", authorUsername: "trader_joe", text: `@justasklens ${FIXTURES.danger.mint}` });
+    const second = await processMention(rt, { id: "m_unlinked_2", authorId: "user_1", authorUsername: "trader_joe", text: `@justasklens ${FIXTURES.safe.mint}` });
     expect(first.status).toBe("replied");
     expect(second.status).toBe("rate_limited");
     // Mentions never attach an X id to an account.
@@ -227,13 +227,13 @@ describe("mention pipeline", () => {
       id: "mention_1",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: `@askLens ${FIXTURES.danger.mint}`,
+      text: `@justasklens ${FIXTURES.danger.mint}`,
     });
     const second = await processMention(rt, {
       id: "mention_2",
       authorId: "user_1",
       authorUsername: "trader_joe",
-      text: `@askLens ${FIXTURES.safe.mint}`,
+      text: `@justasklens ${FIXTURES.safe.mint}`,
     });
     expect(first.status).toBe("replied");
     expect(second.status).toBe("replied");
