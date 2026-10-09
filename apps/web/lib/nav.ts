@@ -1,7 +1,8 @@
-/** The path a new user follows: check a token, read the record, go Pro, then the account. */
+/** The path a new user follows: check a token, read the record and updates, go Pro, then the account. */
 export const NAV = [
   { href: "/check", label: "Check" },
   { href: "/", label: "Record" },
+  { href: "/updates", label: "Updates" },
   { href: "/pro", label: "Pro" },
   { href: "/account", label: "Account" },
   { href: "/verify", label: "Verify" },
