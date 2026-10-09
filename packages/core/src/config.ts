@@ -1,6 +1,6 @@
 import { DEFAULTS } from "./defaults.js";
 import { resolveFromRepoRoot } from "./paths.js";
-import type { LensConfig } from "./types.js";
+import type { EditorialKind, LensConfig } from "./types.js";
 
 export const USDC_MINT_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const USDT_MINT_MAINNET = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
@@ -21,6 +21,44 @@ function xAuthMode(value: string | undefined): "oauth1" | "oauth2" {
   const mode = clean(value)?.toLowerCase() ?? "oauth1";
   if (mode === "oauth1" || mode === "oauth2") return mode;
   throw new Error(`X_AUTH_MODE must be oauth1 or oauth2. Received "${mode}".`);
+}
+
+const EDITORIAL_KINDS: readonly EditorialKind[] = ["tip", "term", "recap"];
+
+function editorialKinds(value: string | undefined): EditorialKind[] {
+  const raw = (clean(value) ?? "tip,term,recap").split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+  for (const kind of raw) {
+    if (!EDITORIAL_KINDS.includes(kind as EditorialKind)) {
+      throw new Error(`EDITORIAL_KINDS may only list tip, term, recap. Received "${kind}".`);
+    }
+  }
+  return [...new Set(raw)] as EditorialKind[];
+}
+
+function utcHour(name: string, value: string | undefined, fallback: number): number {
+  const hour = num(value, fallback);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+    throw new Error(`${name} must be a whole hour from 0 to 23. Received "${value}".`);
+  }
+  return hour;
+}
+
+function editorialHours(env: NodeJS.ProcessEnv): Record<EditorialKind, number> {
+  const hours = {
+    tip: utcHour("EDITORIAL_TIP_HOUR_UTC", env.EDITORIAL_TIP_HOUR_UTC, 13),
+    recap: utcHour("EDITORIAL_RECAP_HOUR_UTC", env.EDITORIAL_RECAP_HOUR_UTC, 17),
+    term: utcHour("EDITORIAL_TERM_HOUR_UTC", env.EDITORIAL_TERM_HOUR_UTC, 22),
+  };
+  if (new Set(Object.values(hours)).size !== 3) {
+    throw new Error("EDITORIAL_TIP_HOUR_UTC, EDITORIAL_RECAP_HOUR_UTC, and EDITORIAL_TERM_HOUR_UTC must be different hours.");
+  }
+  return hours;
+}
+
+function lateHours(value: string | undefined): number {
+  const hours = num(value, 6);
+  if (hours < 0) throw new Error(`EDITORIAL_MAX_LATE_HOURS must be 0 or more. Received "${value}".`);
+  return hours;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
@@ -89,6 +127,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
       .filter(Boolean),
     outboundDailyCap: Math.max(0, Math.floor(num(env.OUTBOUND_DAILY_CAP, 8))),
     outboundDiscover: env.OUTBOUND_DISCOVER === "true",
+    editorialEnabled: env.EDITORIAL_ENABLED === "true",
+    editorialKinds: editorialKinds(env.EDITORIAL_KINDS),
+    editorialMarketFallback: clean(env.EDITORIAL_MARKET_FALLBACK)?.toLowerCase() !== "false",
+    editorialHours: editorialHours(env),
+    editorialMaxLateHours: lateHours(env.EDITORIAL_MAX_LATE_HOURS),
     checkApiLimitPerHour: num(env.CHECK_API_LIMIT_PER_HOUR, 30),
     rpcRetryAttempts: Math.max(1, Math.floor(num(env.RPC_RETRY_ATTEMPTS, 4))),
     proPriceUsdc: num(env.PRO_PRICE_USDC, DEFAULTS.proPriceUsdc),

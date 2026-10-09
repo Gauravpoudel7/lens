@@ -250,6 +250,13 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `OUTBOUND_MINTS` | empty | Comma-separated mints to always consider |
 | `OUTBOUND_DISCOVER` | `false` | Also read DexScreener profiles and boosts |
 | `OUTBOUND_DAILY_CAP` | `8` | Calls plus warnings posted per UTC day |
+| `EDITORIAL_ENABLED` | `false` | Daily tip, term, and recap posts. Proved first, no URL, no hashtag. Only posts when `X_MODE=live` |
+| `EDITORIAL_KINDS` | `tip,term,recap` | Which editorial posts run |
+| `EDITORIAL_MARKET_FALLBACK` | `true` | When Lens checked fewer than 3 coins today, the recap covers GeckoTerminal trending coins, risk first |
+| `EDITORIAL_TIP_HOUR_UTC` | `13` | Tip slot. Hours are 0–23 and must all differ |
+| `EDITORIAL_RECAP_HOUR_UTC` | `17` | Recap slot |
+| `EDITORIAL_TERM_HOUR_UTC` | `22` | Term slot |
+| `EDITORIAL_MAX_LATE_HOURS` | `6` | A slot later than this is skipped for the day |
 | `PRO_TREASURY_WALLET` | empty | Wallet that receives Pro USDC |
 | `PRO_PRICE_USDC` | `10` | Price for one Pro period. The Pro page reads this. Unset means 10 USDC |
 | `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |

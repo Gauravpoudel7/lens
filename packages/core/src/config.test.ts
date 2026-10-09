@@ -55,4 +55,26 @@ describe("loadConfig handle, caps, and session", () => {
     expect(set.alertDmsPerDay).toBe(20);
     expect(set.sessionSecret).toBe("s3cret");
   });
+
+  it("keeps editorial posts off by default with 13, 17, and 22 UTC slots", () => {
+    const config = loadConfig({});
+    expect(config.editorialEnabled).toBe(false);
+    expect(config.editorialKinds).toEqual(["tip", "term", "recap"]);
+    expect(config.editorialMarketFallback).toBe(true);
+    expect(config.editorialHours).toEqual({ tip: 13, recap: 17, term: 22 });
+    expect(config.editorialMaxLateHours).toBe(6);
+    expect(config.outboundEnabled).toBe(false);
+    expect(config.outboundDiscover).toBe(false);
+  });
+
+  it("rejects editorial hours outside 0-23, equal hours, and unknown kinds", () => {
+    expect(() => loadConfig({ EDITORIAL_TIP_HOUR_UTC: "24" })).toThrow(/0 to 23/);
+    expect(() => loadConfig({ EDITORIAL_TERM_HOUR_UTC: "7.5" })).toThrow(/0 to 23/);
+    expect(() => loadConfig({ EDITORIAL_TIP_HOUR_UTC: "17" })).toThrow(/different/);
+    expect(() => loadConfig({ EDITORIAL_KINDS: "tip,meme" })).toThrow(/tip, term, recap/);
+    expect(loadConfig({ EDITORIAL_KINDS: "recap", EDITORIAL_MARKET_FALLBACK: "false" })).toMatchObject({
+      editorialKinds: ["recap"],
+      editorialMarketFallback: false,
+    });
+  });
 });

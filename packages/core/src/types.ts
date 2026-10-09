@@ -210,6 +210,15 @@ export interface LensConfig {
   outboundMints: string[];
   outboundDailyCap: number;
   outboundDiscover: boolean;
+  /** Daily tip, term, and recap posts. Off by default. */
+  editorialEnabled: boolean;
+  editorialKinds: EditorialKind[];
+  /** When Lens checked fewer than 3 coins today, post a risk-first trending recap instead. */
+  editorialMarketFallback: boolean;
+  /** UTC hour of each slot. All different. */
+  editorialHours: Record<EditorialKind, number>;
+  /** A slot more than this many hours late is skipped for the day. */
+  editorialMaxLateHours: number;
   checkApiLimitPerHour: number;
   rpcRetryAttempts: number;
   proPriceUsdc: number;

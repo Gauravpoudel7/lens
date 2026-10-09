@@ -122,5 +122,19 @@ describe("doctor probes", () => {
     expect(text).toContain("Pro payments run on devnet");
     expect(text).toContain("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
     expect(text).toContain("note");
+    expect(text).toContain("EDITORIAL_ENABLED=false");
+  });
+
+  it("lists the editorial slots when editorial posts are on", () => {
+    const config = loadConfig({ ...readyEnv, EDITORIAL_ENABLED: "true", EDITORIAL_KINDS: "tip,recap" });
+    const text = formatDoctorReport(
+      buildDoctorReport(config, {
+        rpc: { ok: true, detail: "answered" },
+        jupiter: { ok: true, detail: "answered" },
+        xToken: "skipped",
+        keypairPresent: true,
+      }),
+    );
+    expect(text).toContain("Editorial posts on: tip 13:00, recap 17:00 UTC, up to 6 h late, market fallback on");
   });
 });

@@ -175,6 +175,16 @@ function settingRows(config: LensConfig, probes: DoctorProbes): DoctorRow[] {
     }
   }
 
+  if (!config.editorialEnabled) {
+    note("EDITORIAL_ENABLED=false, so no daily tip, term, or recap is posted");
+  } else {
+    const slots = config.editorialKinds
+      .map((kind) => `${kind} ${String(config.editorialHours[kind]).padStart(2, "0")}:00`)
+      .join(", ");
+    note(
+      `Editorial posts on: ${slots} UTC, up to ${config.editorialMaxLateHours} h late, market fallback ${config.editorialMarketFallback ? "on" : "off"}`,
+    );
+  }
   if (!config.llmApiKey) note("LLM_API_KEY is not set, so replies use the fixed template");
   if (!config.birdeyeApiKey) note("BIRDEYE_API_KEY is not set, so creator-sold % is often unknown");
   if (!config.jupiterFeeAccount) note("JUPITER_FEE_ACCOUNT is not set, so swaps carry no fee");
