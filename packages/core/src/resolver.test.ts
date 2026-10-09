@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURES, MockTokenDataProvider } from "./providers/mock.js";
 import type { SymbolMatch, TokenDataProvider } from "./providers/types.js";
-import { extractTokenCandidates, resolveToken } from "./resolver.js";
+import { extractTokenCandidates, resolveMentionToken, resolveToken } from "./resolver.js";
 
 const REAL_JUP = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
 const COPY_JUP = "JUPrJXKV6MyLkbFgZMDXPn7mYR4yqMNn5Pwg27zcyyG";
@@ -136,5 +136,52 @@ describe("token resolver", () => {
     );
     expect(found.mints).toEqual([]);
     expect(await resolveToken("@justasklens is this legit?", provider)).toBeNull();
+  });
+});
+
+describe("mention resolver", () => {
+  const BONK = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+  const provider = scripted({
+    JUP: { status: "unique", token: { mint: REAL_JUP, symbol: "JUP", name: "Jupiter" } },
+    BONK: { status: "unique", token: { mint: BONK, symbol: "BONK", name: "Bonk" } },
+  });
+  const solParent = "$SOL is still holding $116-$119. Buyers have defended it three times now.";
+
+  it("uses the parent only when the reply names no token", async () => {
+    const resolved = await resolveMentionToken("@MookieNFT @justasklens is this safe", solParent, provider);
+    expect(resolved).toMatchObject({ status: "notice", symbol: "SOL" });
+    if (resolved?.status !== "notice") return;
+    expect(resolved.text).toContain("$SOL is the native Solana asset");
+  });
+
+  it("takes the ticker in the reply over the parent's ticker", async () => {
+    const resolved = await resolveMentionToken("@justasklens $JUP?", solParent, provider);
+    expect(resolved).toMatchObject({ status: "token", mint: REAL_JUP, via: "symbol" });
+  });
+
+  it("takes the ticker in the reply over a contract address in the parent", async () => {
+    const resolved = await resolveMentionToken(
+      "@justasklens $BONK?",
+      `New launch, CA: ${COPY_JUP} send it`,
+      provider,
+    );
+    expect(resolved).toMatchObject({ status: "token", mint: BONK, via: "symbol" });
+  });
+
+  it("asks which token when the parent names two and the reply names none", async () => {
+    const resolved = await resolveMentionToken(
+      "@Steph_iscrypto @justasklens",
+      "500 $XRP could be worth over $1,037,000 by 2028. The XRP $ARMY has launched",
+      provider,
+    );
+    expect(resolved).toMatchObject({ status: "notice" });
+    if (resolved?.status !== "notice") return;
+    expect(resolved.text).toContain("more than one token");
+    expect(resolved.text.endsWith("Not financial advice.")).toBe(true);
+  });
+
+  it("scores the parent's contract address even when the parent also has its ticker", async () => {
+    const resolved = await resolveMentionToken("@justasklens", `$BONK CA: ${BONK}`, provider);
+    expect(resolved).toMatchObject({ status: "token", mint: BONK, via: "mint" });
   });
 });

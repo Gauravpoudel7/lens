@@ -246,6 +246,12 @@ export function ambiguousTickerReply(symbol: string): string {
   ]);
 }
 
+export function multipleTokensReply(): string {
+  return notice([
+    "That post names more than one token. Reply with the contract address of the one you want checked.",
+  ]);
+}
+
 export function unavailableTickerReply(symbol: string): string {
   return notice([
     `I couldn't confirm a verified $${symbol}. Reply with the contract address so I check the right one.`,

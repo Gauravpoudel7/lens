@@ -10,7 +10,7 @@ import type { ReplyWriter } from "./reply/writer.js";
 import { buildProofPayload, explorerTxUrl } from "./proof/hash.js";
 import type { ProofPublisher } from "./proof/solana.js";
 import type { TokenDataProvider } from "./providers/types.js";
-import { resolveToken } from "./resolver.js";
+import { resolveMentionToken, resolveToken } from "./resolver.js";
 import { decideSwapLink, replyHasSwapLink, wantsTradeLink } from "./swap.js";
 import type { LensStore } from "./store/types.js";
 import type {
@@ -126,39 +126,19 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
     const parentPostId = incoming.parentId ?? incoming.id;
     const askedToTrade = wantsTradeLink(incoming.text);
 
-    const reusable = await resolveToken(sourceText, deps.provider);
-    if (reusable?.status === "token") {
-      const cached = await deps.store.findReusableCheck(parentPostId, reusable.mint);
-      if (cached && cachedReplyMatchesSwap(deps, incoming.text, cached)) {
-        return finishReply(deps, incoming, cached, true);
-      }
-    }
-
-    const created = await createRiskCheck(deps, {
-      kind: "reply",
-      text: sourceText,
-      claimText: claimSource(parentText, incoming.text),
-      parentPostId,
-      mentionId: incoming.id,
-      askedBy: incoming.authorUsername,
-      offerSwap: askedToTrade,
-    });
-
-    if (!created.ok && (created.error === "no_token" || created.error === "notice")) {
+    const resolved = await resolveMentionToken(incoming.text, parentText, deps.provider);
+    if (resolved?.status !== "token") {
       if (askedToTrade) {
-        log("swap link omitted", {
-          reason: "token was not scored",
-          symbol: created.error === "notice" ? created.symbol : undefined,
-        });
+        log("swap link omitted", { reason: "token was not scored", symbol: resolved?.symbol });
       }
       const notice = await createUnresolvedCheck(deps, {
         mentionId: incoming.id,
         parentPostId,
         askedBy: incoming.authorUsername,
         sourceText,
-        text: created.error === "notice" ? created.detail : undefined,
-        symbol: created.error === "notice" ? created.symbol : undefined,
-        name: created.error === "notice" ? created.name : undefined,
+        text: resolved?.text,
+        symbol: resolved?.symbol,
+        name: resolved?.name,
       });
       if (!notice.ok) {
         await deps.store.updateMention(incoming.id, {
@@ -169,6 +149,22 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
       }
       return finishReply(deps, incoming, notice.check, false);
     }
+
+    const cached = await deps.store.findReusableCheck(parentPostId, resolved.mint);
+    if (cached && cachedReplyMatchesSwap(deps, incoming.text, cached)) {
+      return finishReply(deps, incoming, cached, true);
+    }
+
+    const created = await createRiskCheck(deps, {
+      kind: "reply",
+      mint: resolved.mint,
+      text: sourceText,
+      claimText: claimSource(parentText, incoming.text),
+      parentPostId,
+      mentionId: incoming.id,
+      askedBy: incoming.authorUsername,
+      offerSwap: askedToTrade,
+    });
 
     if (!created.ok) {
       await deps.store.updateMention(incoming.id, {

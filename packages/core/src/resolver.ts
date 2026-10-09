@@ -1,4 +1,5 @@
 import type { TokenDataProvider } from "./providers/types.js";
+import { multipleTokensReply } from "./reply/policy.js";
 import { bareTickerNotice, verifiedMatchNotice } from "./tickers.js";
 
 const BASE58_CHAR = "[1-9A-HJ-NP-Za-km-z]";
@@ -78,6 +79,26 @@ export async function resolveToken(
   const textNotice = verifiedMatchNotice(symbol, match);
   if (!textNotice) return null;
   return { status: "notice", symbol, name: "Needs a contract address", text: textNotice };
+}
+
+/**
+ * A mention resolves from the asker's own text first. The parent post is used
+ * only when the mention names no $ticker and no contract address. A parent that
+ * names two or more tokens gets a notice that asks which one.
+ */
+export async function resolveMentionToken(
+  mentionText: string,
+  parentText: string | null | undefined,
+  provider: TokenDataProvider,
+): Promise<TokenResolution | null> {
+  const own = extractTokenCandidates(mentionText);
+  if (own.mints.length > 0 || own.symbols.length > 0) return resolveToken(mentionText, provider);
+  if (!parentText) return null;
+  const parent = extractTokenCandidates(parentText);
+  if (parent.mints.length > 1 || (parent.mints.length === 0 && parent.symbols.length > 1)) {
+    return { status: "notice", symbol: "—", name: "Needs a contract address", text: multipleTokensReply() };
+  }
+  return resolveToken(parentText, provider);
 }
 
 function noticeName(symbol: string): string {

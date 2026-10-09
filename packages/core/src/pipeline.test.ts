@@ -261,6 +261,39 @@ describe("mention pipeline", () => {
     expect(check?.proof?.payload).toContain(hashReply(result.replyText));
   });
 
+  it("answers from the reply text: a $SOL parent and a plain question get the native SOL notice", async () => {
+    const { rt, x } = deps();
+    const result = await processMention(rt, {
+      id: "mention_sol",
+      authorId: "user_1",
+      authorUsername: "MookieNFT",
+      text: "@MookieNFT @justasklens is this safe",
+      parentId: "parent_sol",
+      parentText: "$SOL is still holding $116-$119. Buyers have defended it three times now.",
+    });
+    expect(result.status).toBe("replied");
+    if (result.status !== "replied") return;
+    expect(result.riskLevel).toBe("NONE");
+    expect(result.replyText).toContain("$SOL is the native Solana asset");
+    expect(x.replies[0]?.text).toBe(result.replyText);
+  });
+
+  it("scores the token named in the reply, not the one in the parent", async () => {
+    const { rt } = deps();
+    const result = await processMention(rt, {
+      id: "mention_safe",
+      authorId: "user_1",
+      authorUsername: "trader_joe",
+      text: "@justasklens $SAFE?",
+      parentId: "parent_1",
+      parentText: parent().text,
+    });
+    expect(result.status).toBe("replied");
+    if (result.status !== "replied") return;
+    const check = await rt.store.getCheck(result.checkId);
+    expect(check?.tokenMint).toBe(FIXTURES.safe.mint);
+  });
+
   it("asks for a contract when the ticker is not one verified token", async () => {
     const { rt } = deps();
     const result = await processMention(rt, {
