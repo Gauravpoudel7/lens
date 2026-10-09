@@ -14,6 +14,7 @@ import {
   parseMintExtensions,
   mergeTokenData,
   parseRugcheckReport,
+  plausibleSnapshot,
 } from "./parse.js";
 import { evaluateRisk, snapshotToRuleInput } from "../risk/engine.js";
 import { buildTemplateReply } from "../reply/policy.js";
@@ -369,6 +370,18 @@ describe("live data parsers", () => {
     expect(summary?.symbol).toBe("COIN");
   });
 
+  it("leaves RugCheck's own market vaults out of the top 10", () => {
+    const summary = parseRugcheckReport({
+      token: { supply: 1000, mintAuthority: null, freezeAuthority: null },
+      markets: [{ pubkey: "PoolState111", marketType: "raydium_clmm", liquidityA: "VaultA111", liquidityB: "VaultB111" }],
+      topHolders: [
+        { address: "VaultA111", owner: "PoolState111", pct: 99.98 },
+        { address: "Wallet111", owner: "Person111", pct: 0.01 },
+      ],
+    });
+    expect(summary?.top10HolderPct).toBeCloseTo(0.01);
+  });
+
   it("reads Token-2022 risks from a RugCheck report", () => {
     const summary = parseRugcheckReport({
       token: { mintAuthority: null, freezeAuthority: null, supply: 1000 },
@@ -380,6 +393,87 @@ describe("live data parsers", () => {
     });
     expect(summary?.permanentDelegate).toBe(true);
     expect(summary?.transferFeeBps).toBe(800);
+  });
+});
+
+describe("plausibility gate", () => {
+  const now = new Date("2026-10-09T00:00:00Z");
+  function snapshot(patch: Partial<ReturnType<typeof base>> = {}) {
+    return { ...base(), ...patch };
+  }
+  function base() {
+    return mergeTokenData({
+      mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      dex: {
+        symbol: "JUP",
+        name: "Jupiter",
+        priceUsd: 0.36,
+        liquidityUsd: 5_000_000,
+        fdvUsd: 2_500_000_000,
+        createdAt: "2024-01-29T08:22:38.000Z",
+        url: null,
+        ignoredPools: [],
+      },
+      rug: null,
+      chain: null,
+      birdeye: null,
+    })!;
+  }
+
+  it("passes a clean snapshot unchanged", () => {
+    const clean = snapshot({ top10HolderPct: 66 });
+    const result = plausibleSnapshot(clean, { verified: true, rugLiquidityUsd: 5_800_000, rugPriceUsd: 0.362, now });
+    expect(result.dropped).toEqual([]);
+    expect(result.snapshot).toEqual(clean);
+  });
+
+  it("drops liquidity when RugCheck disagrees by more than 10x (the $965M JUP reply)", () => {
+    const result = plausibleSnapshot(snapshot({ liquidityUsd: 965_147_702, priceUsd: 1656.9 }), {
+      verified: true,
+      rugLiquidityUsd: 5_811_436,
+      rugPriceUsd: 0.3625,
+      now,
+    });
+    expect(result.snapshot.liquidityUsd).toBeNull();
+    expect(result.snapshot.priceUsd).toBeNull();
+    expect(result.dropped.map((drop) => drop.fact)).toEqual(["liquidity", "price"]);
+  });
+
+  it("drops liquidity above FDV", () => {
+    const result = plausibleSnapshot(snapshot({ liquidityUsd: 3_000_000, fdvUsd: 2_000_000 }), { verified: false, now });
+    expect(result.snapshot.liquidityUsd).toBeNull();
+    expect(result.dropped[0]?.reason).toContain("above FDV");
+  });
+
+  it("drops an age under one day for a Jupiter-verified token, and keeps it for an unverified one", () => {
+    const young = snapshot({ createdAt: "2026-10-08T12:00:00.000Z" });
+    expect(plausibleSnapshot(young, { verified: true, now }).snapshot.createdAt).toBeNull();
+    expect(plausibleSnapshot(young, { verified: false, now }).snapshot.createdAt).toBe(young.createdAt);
+  });
+
+  it("drops a 100% top 10 next to real liquidity, and keeps it for a tiny fresh pool", () => {
+    const deep = plausibleSnapshot(snapshot({ top10HolderPct: 99.99, liquidityUsd: 2_000_000 }), { verified: false, now });
+    expect(deep.snapshot.top10HolderPct).toBeNull();
+    expect(deep.dropped[0]?.fact).toBe("top10");
+    const fresh = plausibleSnapshot(snapshot({ top10HolderPct: 99.99, liquidityUsd: 2_600 }), { verified: false, now });
+    expect(fresh.snapshot.top10HolderPct).toBe(99.99);
+  });
+
+  it("leaves the 100% fact off the X reply once it is dropped", () => {
+    const { snapshot: checked } = plausibleSnapshot(snapshot({ top10HolderPct: 100, liquidityUsd: 2_000_000 }), {
+      verified: true,
+      now,
+    });
+    const report = evaluateRisk(snapshotToRuleInput(checked, { burned: false, locked: false }, now), checked.links);
+    const reply = buildTemplateReply({
+      riskLevel: report.level,
+      symbol: checked.symbol,
+      name: checked.name,
+      mint: checked.mint,
+      facts: report.facts,
+      reportUrl: "https://example.com/r/x",
+    });
+    expect(reply).not.toContain("100%");
   });
 });
 

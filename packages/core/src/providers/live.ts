@@ -13,11 +13,17 @@ import {
   parseDexTokenResponse,
   parseJupiterVerifiedTokens,
   parseRugcheckReport,
+  plausibleSnapshot,
   type ChainSummary,
   type VerifiedTokenRow,
 } from "./parse.js";
 import { jupiterApiKeyHeader } from "./jupiter.js";
 import type { SymbolMatch, TokenDataProvider } from "./types.js";
+
+interface VerifiedIndex {
+  bySymbol: Map<string, VerifiedTokenRow[]>;
+  mints: Set<string>;
+}
 
 /** Refresh the verified symbol index at most this often. */
 const VERIFIED_TTL_MS = 60 * 60 * 1000;
@@ -45,8 +51,8 @@ async function fetchJson(url: string, init?: RequestInit, attempts = 4, timeoutM
 
 export class LiveTokenDataProvider implements TokenDataProvider {
   readonly name = "live";
-  private verified: { loadedAt: number; bySymbol: Map<string, VerifiedTokenRow[]> } | null = null;
-  private verifiedInflight: Promise<Map<string, VerifiedTokenRow[]>> | null = null;
+  private verified: ({ loadedAt: number } & VerifiedIndex) | null = null;
+  private verifiedInflight: Promise<VerifiedIndex> | null = null;
 
   constructor(
     private readonly config: Pick<LensConfig, "dataRpcUrl" | "birdeyeApiKey" | "jupiterBaseUrl"> & {
@@ -62,8 +68,8 @@ export class LiveTokenDataProvider implements TokenDataProvider {
    */
   async resolveBySymbol(symbol: string): Promise<SymbolMatch> {
     try {
-      const index = await this.verifiedIndex();
-      const hits = index.get(normalizeTicker(symbol)) ?? [];
+      const { bySymbol } = await this.verifiedIndex();
+      const hits = bySymbol.get(normalizeTicker(symbol)) ?? [];
       if (hits.length === 1) {
         const token = hits[0]!;
         return { status: "unique", token: { mint: token.mint, symbol: token.symbol, name: token.name } };
@@ -86,10 +92,16 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     if (chainRead.notMint) return null;
     const merged = mergeTokenData({ mint, dex, rug, chain: chainRead.summary, birdeye });
     if (!merged) return null;
-    if (merged.priceUsd == null) {
-      merged.priceUsd = await this.jupiterPrice(mint);
+    const { snapshot, dropped } = plausibleSnapshot(merged, {
+      verified: await this.isVerifiedMint(mint),
+      rugLiquidityUsd: rug?.liquidityUsd,
+      rugPriceUsd: rug?.priceUsd,
+    });
+    for (const drop of dropped) log("fact dropped", { mint, ...drop });
+    if (snapshot.priceUsd == null) {
+      snapshot.priceUsd = await this.jupiterPrice(mint);
     }
-    return merged;
+    return snapshot;
   }
 
   async getPrice(mint: string): Promise<number | null> {
@@ -267,9 +279,17 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     return this.config.rpcRetryAttempts ?? 4;
   }
 
-  private verifiedIndex(): Promise<Map<string, VerifiedTokenRow[]>> {
+  private async isVerifiedMint(mint: string): Promise<boolean> {
+    try {
+      return (await this.verifiedIndex()).mints.has(mint);
+    } catch {
+      return false;
+    }
+  }
+
+  private verifiedIndex(): Promise<VerifiedIndex> {
     const fresh = this.verified && Date.now() - this.verified.loadedAt < VERIFIED_TTL_MS;
-    if (fresh && this.verified) return Promise.resolve(this.verified.bySymbol);
+    if (fresh && this.verified) return Promise.resolve(this.verified);
     if (!this.verifiedInflight) {
       this.verifiedInflight = this.loadVerifiedIndex().finally(() => {
         this.verifiedInflight = null;
@@ -278,7 +298,7 @@ export class LiveTokenDataProvider implements TokenDataProvider {
     return this.verifiedInflight;
   }
 
-  private async loadVerifiedIndex(): Promise<Map<string, VerifiedTokenRow[]>> {
+  private async loadVerifiedIndex(): Promise<VerifiedIndex> {
     try {
       const body = await fetchJson(
         `${this.config.jupiterBaseUrl}/tokens/v2/tag?query=verified`,
@@ -290,13 +310,13 @@ export class LiveTokenDataProvider implements TokenDataProvider {
       if (tokens.length < VERIFIED_MIN_COUNT) {
         throw new Error(`jupiter verified list too small (${tokens.length})`);
       }
-      const bySymbol = indexVerifiedTokens(tokens);
-      this.verified = { loadedAt: Date.now(), bySymbol };
+      const index = { bySymbol: indexVerifiedTokens(tokens), mints: new Set(tokens.map((token) => token.mint)) };
+      this.verified = { loadedAt: Date.now(), ...index };
       log("jupiter verified list loaded", { count: tokens.length });
-      return bySymbol;
+      return index;
     } catch (err) {
       log("jupiter verified list failed", err instanceof Error ? err.message : err);
-      if (this.verified) return this.verified.bySymbol;
+      if (this.verified) return this.verified;
       throw err;
     }
   }

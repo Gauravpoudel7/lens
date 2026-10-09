@@ -444,11 +444,13 @@ export function parseRugcheckReport(body: unknown, now = new Date()): RugSummary
     burnedPct = ranked
       .filter((holder) => typeof holder.owner === "string" && BURN_OWNERS.has(holder.owner))
       .reduce((sum, holder) => sum + numberOrZero(holder.pct), 0);
+    const pools = rugPoolAccounts(report);
     top10HolderPct = ranked
       .filter((holder) => {
+        if (typeof holder.address === "string" && pools.has(holder.address)) return false;
         if (typeof holder.owner !== "string") return true;
         if (BURN_OWNERS.has(holder.owner)) return false;
-        return !isPoolHolder(holder.owner);
+        return !pools.has(holder.owner) && !isPoolHolder(holder.owner);
       })
       .slice(0, 10)
       .reduce((sum, holder) => sum + numberOrZero(holder.pct), 0);
@@ -471,6 +473,18 @@ export function parseRugcheckReport(body: unknown, now = new Date()): RugSummary
     liquidityUsd: numberOrNull(report.totalMarketLiquidity),
     ...rugTraps(report),
   };
+}
+
+/** RugCheck's own market list: pool accounts and their token vaults are not holders. */
+function rugPoolAccounts(report: Record<string, unknown>): Set<string> {
+  const accounts = new Set<string>();
+  const markets = Array.isArray(report.markets) ? (report.markets as Array<Record<string, unknown>>) : [];
+  for (const market of markets) {
+    for (const key of [market.pubkey, market.liquidityA, market.liquidityB]) {
+      if (typeof key === "string" && key) accounts.add(key);
+    }
+  }
+  return accounts;
 }
 
 function rugTraps(report: Record<string, unknown>): Pick<
@@ -629,6 +643,71 @@ export function mergeTokenData(input: {
     links,
     sources,
   };
+}
+
+/** Two sources further apart than this are not reporting the same thing. */
+const SOURCE_DISAGREE_RATIO = 10;
+/** A top 10 this high next to real depth means a pool or custody account was not recognized. */
+const TOP10_SUSPECT_PCT = 99;
+const TOP10_SUSPECT_LIQUIDITY_USD = 100_000;
+const DAY_MS = 86_400_000;
+
+export interface DroppedFact {
+  fact: "liquidity" | "price" | "age" | "top10";
+  reason: string;
+}
+
+/**
+ * Last check before the risk engine. A number that fails a plausibility rule
+ * becomes null, so the engine reports it as unverified and the X reply leaves it out.
+ */
+export function plausibleSnapshot(
+  input: TokenSnapshot,
+  opts: { verified: boolean; rugLiquidityUsd?: number | null; rugPriceUsd?: number | null; now?: Date },
+): { snapshot: TokenSnapshot; dropped: DroppedFact[] } {
+  const snapshot = { ...input };
+  const dropped: DroppedFact[] = [];
+  const now = opts.now ?? new Date();
+  if (disagree(snapshot.liquidityUsd, opts.rugLiquidityUsd)) {
+    dropped.push({
+      fact: "liquidity",
+      reason: `DexScreener ${snapshot.liquidityUsd} and RugCheck ${opts.rugLiquidityUsd} differ by more than ${SOURCE_DISAGREE_RATIO}x`,
+    });
+    snapshot.liquidityUsd = null;
+  }
+  if (snapshot.liquidityUsd != null && snapshot.fdvUsd != null && snapshot.fdvUsd > 0 && snapshot.liquidityUsd > snapshot.fdvUsd) {
+    dropped.push({ fact: "liquidity", reason: `liquidity ${snapshot.liquidityUsd} is above FDV ${snapshot.fdvUsd}` });
+    snapshot.liquidityUsd = null;
+  }
+  if (disagree(snapshot.priceUsd, opts.rugPriceUsd)) {
+    dropped.push({
+      fact: "price",
+      reason: `price ${snapshot.priceUsd} and RugCheck ${opts.rugPriceUsd} differ by more than ${SOURCE_DISAGREE_RATIO}x`,
+    });
+    snapshot.priceUsd = null;
+  }
+  if (opts.verified && snapshot.createdAt && now.getTime() - Date.parse(snapshot.createdAt) < DAY_MS) {
+    dropped.push({ fact: "age", reason: `Jupiter-verified token reported as created ${snapshot.createdAt}` });
+    snapshot.createdAt = null;
+  }
+  if (
+    snapshot.top10HolderPct != null &&
+    snapshot.top10HolderPct >= TOP10_SUSPECT_PCT &&
+    snapshot.liquidityUsd != null &&
+    snapshot.liquidityUsd >= TOP10_SUSPECT_LIQUIDITY_USD
+  ) {
+    dropped.push({
+      fact: "top10",
+      reason: `top 10 ${snapshot.top10HolderPct}% with liquidity ${snapshot.liquidityUsd}; an unrecognized pool or custody account`,
+    });
+    snapshot.top10HolderPct = null;
+  }
+  return { snapshot, dropped };
+}
+
+function disagree(a: number | null | undefined, b: number | null | undefined): boolean {
+  if (a == null || b == null || a <= 0 || b <= 0) return false;
+  return Math.max(a, b) / Math.min(a, b) > SOURCE_DISAGREE_RATIO;
 }
 
 function numberOrNull(value: unknown): number | null {
