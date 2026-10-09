@@ -166,7 +166,7 @@ Do not commit that drift.
 | `npm run demo:devnet` | Same loop as the demo, but the memo is a real devnet transaction |
 | `npm run dev` | Scorecard and HTTP API on port 3847 |
 | `npm run dev:landing` | Marketing landing page on port 3848 (`apps/landing`). No API, wallet, or X calls |
-| `npm run worker` | Poll mentions, run the outbound job, score due checks |
+| `npm run worker` | Poll mentions, run the outbound job and the editorial post, score due checks |
 | `npm run worker:once` | Single poll |
 | `npm run post -- --mint <address>` | Outbound post. HIGH becomes a warning, LOW a call, otherwise a note |
 | `npm run discover` | One outbound pass. No-op unless `OUTBOUND_ENABLED=true` |
@@ -176,6 +176,7 @@ Do not commit that drift.
 | `npm run score` | Score checks older than `OUTCOME_WINDOW_DAYS` |
 | `npm run score -- --window-days 0` | Score everything that is still open |
 | `npm run checks:review` | List live checks made before the 2026-10-09 data fixes whose numbers cannot be backed up. Add `-- --apply` to hide them from the scorecard (proofs and report links stay) |
+| `npm run editorial:preview` | Print the next tip and term, today's activity recap, and a live market recap with X weighted lengths. No proof, no post |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
 | `npm run lint` | Lint the website |
 | `npm run typecheck` | Typecheck the bot packages. The Next apps are typechecked by their builds |
@@ -281,6 +282,16 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 - **An OpenAI-compatible key** if you want the model to phrase replies. Without it, the template writer is used. The model never chooses the risk level.
 
 Token reads stay on mainnet even when proofs go to devnet.
+
+## Editorial posts
+
+With `EDITORIAL_ENABLED=true` and `X_MODE=live`, each worker poll can make one editorial post, after outbound posts. There are three a day at most, each at its UTC slot:
+
+- **Tip** (13:00): the next of 15 safety tips (`packages/core/src/editorial/content.ts`).
+- **Recap** (17:00): Lens's own day when it checked at least 3 live coins. Otherwise, with `EDITORIAL_MARKET_FALLBACK=true`, a risk-first look at GeckoTerminal trending Solana coins (mint and freeze authority, age, newest), read through the same data checks as replies. No prices, no %, no `$` before tickers. Fewer than 3 coins that pass the checks means no recap that day.
+- **Term** (22:00): the next of 14 crypto terms.
+
+Each text must fit 280 X-weighted characters (emoji, `•`, and CJK weigh 2; a URL weighs 23) and contain no URL, bare domain, hashtag, or “scam”. It is proved on Solana first, saved as `proved`, then posted. A failed post is retried with the same text up to 3 times inside `EDITORIAL_MAX_LATE_HOURS`. A row left in `proved` after a crash is never posted again on its own; the worker logs it for a human. Mock X mode only logs “would post”. Posts are stored in `EditorialPost`, not `Check`, so the win rate does not change. `/updates` lists them with their proofs.
 
 ## Risk rules
 
