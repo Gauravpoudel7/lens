@@ -1,6 +1,6 @@
 import { newId } from "../ids.js";
 import { isActivePro, normalizeHandle, type AlertRecord, type LinkCodeRecord, type PaymentRecord, type UserRecord, type WatchRecord } from "../accounts.js";
-import { CHECK_DATA_VERSION, type CheckRecord, type MentionRecord, type OutcomeRecord } from "../types.js";
+import { CHECK_DATA_VERSION, type CheckRecord, type EditorialRecord, type MentionRecord, type OutcomeRecord } from "../types.js";
 import type { LensStore } from "./types.js";
 
 function clone<T>(value: T): T {
@@ -10,6 +10,7 @@ function clone<T>(value: T): T {
 export class MemoryStore implements LensStore {
   mentions = new Map<string, MentionRecord>();
   checks = new Map<string, CheckRecord>();
+  editorials = new Map<string, EditorialRecord>();
   replies = new Map<string, { mentionId: string; checkId: string; text: string; cached: boolean; xReplyId: string | null }>();
   usage = new Map<string, number>();
   memos = new Map<string, { payload: string; cluster: string }>();
@@ -83,6 +84,46 @@ export class MemoryStore implements LensStore {
       )
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
     return found ? clone(found) : null;
+  }
+
+  async listChecksBetween(startIso: string, endIso: string): Promise<CheckRecord[]> {
+    const start = Date.parse(startIso);
+    const end = Date.parse(endIso);
+    return [...this.checks.values()]
+      .filter((check) => Date.parse(check.createdAt) >= start && Date.parse(check.createdAt) < end)
+      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+      .map(clone);
+  }
+
+  async saveEditorial(record: EditorialRecord): Promise<void> {
+    for (const existing of this.editorials.values()) {
+      if (existing.kind === record.kind && existing.day === record.day) {
+        throw new Error(`Editorial ${record.kind} for ${record.day} already exists`);
+      }
+    }
+    this.editorials.set(record.id, clone(record));
+  }
+
+  async updateEditorial(
+    id: string,
+    patch: Partial<Pick<EditorialRecord, "status" | "xPostId" | "error" | "attempts">>,
+  ): Promise<void> {
+    const current = this.editorials.get(id);
+    if (!current) throw new Error(`Unknown editorial ${id}`);
+    this.editorials.set(id, { ...current, ...patch, updatedAt: new Date().toISOString() });
+  }
+
+  async getEditorial(kind: EditorialRecord["kind"], day: string): Promise<EditorialRecord | null> {
+    const found = [...this.editorials.values()].find((row) => row.kind === kind && row.day === day);
+    return found ? clone(found) : null;
+  }
+
+  async listEditorial(opts?: { day?: string; status?: EditorialRecord["status"]; limit?: number }): Promise<EditorialRecord[]> {
+    return [...this.editorials.values()]
+      .filter((row) => (!opts?.day || row.day === opts.day) && (!opts?.status || row.status === opts.status))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .slice(0, opts?.limit ?? 100)
+      .map(clone);
   }
 
   async latestCheckForMint(mint: string, maxAgeMs: number, now = new Date()): Promise<CheckRecord | null> {

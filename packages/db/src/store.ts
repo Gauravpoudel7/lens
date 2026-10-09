@@ -4,6 +4,7 @@ import {
   normalizeHandle,
   type AlertRecord,
   type CheckRecord,
+  type EditorialRecord,
   type Fact,
   type LensStore,
   type LinkCodeRecord,
@@ -69,6 +70,33 @@ function parseJson<T>(value: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function toEditorial(row: {
+  id: string;
+  kind: string;
+  day: string;
+  text: string;
+  contentHash: string;
+  payload: string;
+  txSignature: string | null;
+  cluster: string;
+  xPostId: string | null;
+  status: string;
+  recapSource: string | null;
+  error: string | null;
+  attempts: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): EditorialRecord {
+  return {
+    ...row,
+    kind: row.kind as EditorialRecord["kind"],
+    status: row.status as EditorialRecord["status"],
+    recapSource: row.recapSource as EditorialRecord["recapSource"],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 function toCheck(row: CheckRow): CheckRecord {
@@ -243,6 +271,38 @@ export function createPrismaStore(): LensStore {
       });
       if (!row || !row.replyText || !row.proof?.txSignature) return null;
       return toCheck(row);
+    },
+    async listChecksBetween(startIso, endIso) {
+      const rows = await prisma.check.findMany({
+        where: { createdAt: { gte: new Date(startIso), lt: new Date(endIso) } },
+        include,
+        orderBy: { createdAt: "asc" },
+      });
+      return rows.map(toCheck);
+    },
+    async saveEditorial(record) {
+      await prisma.editorialPost.create({
+        data: {
+          ...record,
+          createdAt: new Date(record.createdAt),
+          updatedAt: new Date(record.updatedAt),
+        },
+      });
+    },
+    async updateEditorial(id, patch) {
+      await prisma.editorialPost.update({ where: { id }, data: patch });
+    },
+    async getEditorial(kind, day) {
+      const row = await prisma.editorialPost.findUnique({ where: { kind_day: { kind, day } } });
+      return row ? toEditorial(row) : null;
+    },
+    async listEditorial(opts) {
+      const rows = await prisma.editorialPost.findMany({
+        where: { day: opts?.day, status: opts?.status },
+        orderBy: { createdAt: "desc" },
+        take: opts?.limit ?? 100,
+      });
+      return rows.map(toEditorial);
     },
     async latestCheckForMint(mint, maxAgeMs, now = new Date()) {
       const row = await prisma.check.findFirst({

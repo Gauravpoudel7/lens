@@ -1,5 +1,5 @@
 import type { AlertRecord, LinkCodeRecord, PaymentRecord, UserRecord, WatchRecord } from "../accounts.js";
-import type { CheckRecord, MentionRecord, OutcomeRecord } from "../types.js";
+import type { CheckRecord, EditorialRecord, MentionRecord, OutcomeRecord } from "../types.js";
 
 export interface LensStore {
   getMention(id: string): Promise<MentionRecord | null>;
@@ -18,6 +18,17 @@ export interface LensStore {
   listChecks(opts?: { limit?: number; kinds?: CheckRecord["kind"][] }): Promise<CheckRecord[]>;
   findReusableCheck(parentPostId: string, mint: string): Promise<CheckRecord | null>;
   latestCheckForMint(mint: string, maxAgeMs: number, now?: Date): Promise<CheckRecord | null>;
+  /** All checks with startIso <= createdAt < endIso, any status. */
+  listChecksBetween(startIso: string, endIso: string): Promise<CheckRecord[]>;
+
+  saveEditorial(record: EditorialRecord): Promise<void>;
+  updateEditorial(
+    id: string,
+    patch: Partial<Pick<EditorialRecord, "status" | "xPostId" | "error" | "attempts">>,
+  ): Promise<void>;
+  getEditorial(kind: EditorialRecord["kind"], day: string): Promise<EditorialRecord | null>;
+  /** Newest first. */
+  listEditorial(opts?: { day?: string; status?: EditorialRecord["status"]; limit?: number }): Promise<EditorialRecord[]>;
 
   saveReply(reply: {
     id: string;

@@ -225,3 +225,26 @@ export interface LensConfig {
   /** HMAC key for the 24 h wallet session cookie. Unset means a random key per process. */
   sessionSecret?: string;
 }
+
+export type EditorialKind = "tip" | "term" | "recap";
+
+export type EditorialStatus = "proved" | "posted" | "post_failed" | "duplicate" | "skipped";
+
+export interface EditorialRecord {
+  id: string;
+  kind: EditorialKind;
+  /** UTC yyyy-mm-dd of the slot. */
+  day: string;
+  text: string;
+  contentHash: string;
+  payload: string;
+  txSignature: string | null;
+  cluster: string;
+  xPostId: string | null;
+  status: EditorialStatus;
+  recapSource: "activity" | "market" | null;
+  error: string | null;
+  attempts: number;
+  createdAt: string;
+  updatedAt: string;
+}

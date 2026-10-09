@@ -212,3 +212,27 @@ model XOAuth2Token {
   expiresAt    DateTime
   updatedAt    DateTime
 }
+
+// Daily editorial posts (tips, terms, recaps). Separate from Check so the scorecard is unchanged.
+model EditorialPost {
+  id          String   @id
+  kind        String
+  /// UTC yyyy-mm-dd of the slot.
+  day         String
+  text        String
+  contentHash String
+  payload     String
+  txSignature String?
+  cluster     String
+  xPostId     String?
+  /// proved | posted | post_failed | duplicate | skipped
+  status      String
+  recapSource String?
+  error       String?
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([kind, day])
+  @@index([status, createdAt])
+}
