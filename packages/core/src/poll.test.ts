@@ -28,3 +28,46 @@ describe("poll loop", () => {
     expect(maxActive).toBe(1);
   });
 });
+
+describe("poll with editorial posts", () => {
+  it("still replies to mentions when the editorial cycle throws", async () => {
+    const { loadConfig } = await import("./config.js");
+    const { MemoryStore } = await import("./store/memory.js");
+    const { MockTokenDataProvider, FIXTURES } = await import("./providers/mock.js");
+    const { MockXClient } = await import("./x/mock.js");
+    const { createMockProofPublisher } = await import("./proof/mock.js");
+    const { createReplyWriter } = await import("./reply/writer.js");
+    const { pollOnce } = await import("./poll.js");
+    const config = loadConfig({
+      DATA_MODE: "mock",
+      PROOF_MODE: "mock",
+      X_MODE: "live",
+      LLM_MODE: "template",
+      EDITORIAL_ENABLED: "true",
+    });
+    const store = new MemoryStore();
+    store.listEditorial = async () => {
+      throw new Error("editorial table missing");
+    };
+    const x = new MockXClient();
+    x.seed({
+      id: "100",
+      authorId: "u1",
+      authorUsername: "asker",
+      text: `@justasklens check ${FIXTURES.safe.mint}`,
+      parentId: null,
+      createdAt: "2026-10-09T12:00:00.000Z",
+    });
+    const deps: LensDeps = {
+      config,
+      store,
+      provider: new MockTokenDataProvider(),
+      proofs: createMockProofPublisher(store),
+      writer: createReplyWriter(config),
+      x,
+    };
+    const result = await pollOnce(deps);
+    expect(result.replied).toBe(1);
+    expect(x.replies).toHaveLength(1);
+  });
+});

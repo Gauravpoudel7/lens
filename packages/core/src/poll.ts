@@ -1,4 +1,5 @@
-import { log } from "./ids.js";
+import { errorMessage, log } from "./ids.js";
+import { runEditorialCycle } from "./editorial/cycle.js";
 import { flushQueuedAlerts } from "./alerts.js";
 import { redeemLinkCode } from "./billing/link.js";
 import { scoreDueChecks } from "./outcomes.js";
@@ -59,6 +60,13 @@ export async function pollOnce(deps: LensDeps): Promise<{ seen: number; replied:
   const outbound = await runOutboundCycle(deps);
   if (outbound.posted > 0) {
     log("posted outbound updates", { posted: outbound.posted, considered: outbound.considered });
+  }
+  // Editorial posts must never stop mention replies, DM links, alerts, or scoring.
+  try {
+    const editorial = await runEditorialCycle(deps);
+    if (editorial?.status === "posted") log("posted editorial", { kind: editorial.kind, xPostId: editorial.xPostId });
+  } catch (err) {
+    log("editorial failed", errorMessage(err));
   }
   await pollDmLinks(deps);
   await flushQueuedAlerts(deps);
