@@ -1,3 +1,4 @@
+# Dependencies and build output
 node_modules
 .next
 .next-*
@@ -5,18 +6,32 @@ out
 dist
 coverage
 .turbo
-*.log
-.env
-.env.local
-.env.*.local
-data/*.db
-data/*.db-journal
-data/*.db-wal
-data/*.db-shm
-data/*.bak*
-data/*.json
+*.tsbuildinfo
 prisma/.generated
 tmp-scaffold
+
+# Databases and backups. data/ holds the local database, keypairs, and X tokens.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.bak*
+data/*
+!data/.gitkeep
+
+# Env files and secrets. Examples stay tracked.
+.env
+.env.*
+!.env.example
+*keypair*.json
+*oauth2*.json
+
+# Local, editor, and agent files
+*.log
+*.tmp
+tmp/
+scratchpad/
 .DS_Store
-apps/web/tsconfig.tsbuildinfo
+.vscode/
+.idea/
 .serena/
