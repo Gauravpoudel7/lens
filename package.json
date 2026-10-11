@@ -9,8 +9,6 @@
   ],
   "scripts": {
     "dev": "tsx scripts/ensure-db.ts && npm run dev -w @lens/web",
-    "dev:landing": "npm run dev -w @lens/landing",
-    "build:landing": "npm run build -w @lens/landing",
     "start": "npm run start -w @lens/web",
     "build": "npm run build -w @lens/web",
     "worker": "tsx apps/worker/src/index.ts",
@@ -27,11 +25,11 @@
     "checks:review": "tsx scripts/review-checks.ts",
     "editorial:preview": "tsx scripts/editorial-preview.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/db --noEmit && tsc -p apps/worker --noEmit && tsc -p apps/web --noEmit && tsc -p apps/landing --noEmit",
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/db --noEmit && tsc -p apps/worker --noEmit && tsc -p apps/web --noEmit",
     "db:push": "tsx scripts/ensure-db.ts",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "lint": "npm run lint -w @lens/web && npm run lint -w @lens/landing"
+    "lint": "npm run lint -w @lens/web"
   },
   "devDependencies": {
     "@types/node": "^22.18.6",

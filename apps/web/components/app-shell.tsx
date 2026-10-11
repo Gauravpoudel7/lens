@@ -1,0 +1,40 @@
+import { IBM_Plex_Mono, Newsreader, Source_Sans_3 } from "next/font/google";
+import { ModeNotice } from "@/components/mode-notice";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
+
+const sans = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-source",
+  display: "swap",
+});
+
+const serif = Newsreader({
+  subsets: ["latin"],
+  variable: "--font-newsreader",
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-plex",
+  display: "swap",
+});
+
+/** Scorecard chrome. The marketing page does not use this. */
+export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className={`${sans.variable} ${serif.variable} ${mono.variable} app-shell`}>
+      <a href="#content" className="skip-link">
+        Skip to content
+      </a>
+      <SiteHeader />
+      <ModeNotice />
+      <div id="content" className="mx-auto min-h-[calc(100vh-8rem)] max-w-6xl px-4 pb-16 sm:px-6">
+        {children}
+      </div>
+      <SiteFooter />
+    </div>
+  );
+}

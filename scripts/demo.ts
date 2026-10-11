@@ -100,5 +100,5 @@ if (danger?.proof) {
   console.log(`  cluster: ${danger.proof.cluster}`);
   console.log(`  report: ${rt.config.publicBaseUrl}/r/${danger.id}`);
 }
-console.log(`\nOpen the scorecard at ${rt.config.publicBaseUrl}`);
+console.log(`\nOpen the scorecard at ${rt.config.publicBaseUrl}/record`);
 console.log("Start it with: npm run dev");

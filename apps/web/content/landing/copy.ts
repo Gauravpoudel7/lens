@@ -1,0 +1,215 @@
+import {
+  AGE_CAUTION_HOURS,
+  AGE_DANGER_HOURS,
+  CREATOR_SOLD_CAUTION_PCT,
+  CREATOR_SOLD_DANGER_PCT,
+  LIQUIDITY_SMALL_USD,
+  SNIPER_CAUTION_PCT,
+  SNIPER_DANGER_PCT,
+  TOP10_CAUTION_PCT,
+  TOP10_DANGER_PCT,
+  TRANSFER_FEE_DANGER_BPS,
+} from "@lens/core/thresholds";
+export type LandingFacts = {
+  /** X handle without @. */
+  handle: string;
+  freeChecksPerDay: number;
+  proPriceUsdc: number;
+  proPeriodDays: number;
+  swapFeeBps: number;
+  proofCluster: "Devnet" | "Mainnet";
+  githubUrl: string | null;
+};
+
+export const NAV_LINKS = [
+  { href: "#product", label: "Product" },
+  { href: "#how-it-works", label: "How it works" },
+  { href: "#proof", label: "Proof" },
+  { href: "#pricing", label: "Pricing" },
+];
+
+// Spline scene from the component spec. A Lens-branded scene can replace it.
+export const SPLINE_SCENE = "https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode";
+
+function heroCopy(HANDLE: string) {
+  return {
+  eyebrow: "Live on X · Built on Solana",
+  title: "The AI crypto analyst on X that can’t lie about its record.",
+  // The hero renders the title on exactly these four lines.
+  titleLines: ["The AI crypto", "analyst on X", "that can’t lie", "about its record."],
+  sub: `Tag ${HANDLE} under any Solana post. Get the risk in plain English, proved on Solana.`,
+  memo: "lens:v1|2026-10-07T18:42:11Z|9f2c…e81a", // used by the features proof tile
+  };
+}
+
+export const ECOSYSTEM = {
+  label: "Reads the chain, not the hype",
+  names: ["Solana", "Helius", "DexScreener", "RugCheck", "Birdeye", "Jupiter", "Solana Actions & Blinks", "Colosseum"],
+};
+
+export const PROBLEM = {
+  title: "On X, the loudest post wins. The chain tells a different story.",
+  cards: ["Traps look real", "Bad calls disappear", "AI tip bots are black boxes", "The facts are on-chain, but people read X"],
+  libra: {
+    when: "February 2025",
+    body: "A coin promoted by a head of state fell ~90% in hours (per news reports). The signs were on-chain.",
+  },
+};
+
+function featuresCopy(HANDLE: string) {
+  return {
+  title: "One analyst. Nothing hidden.",
+  tiles: {
+    replies: {
+      title: `${HANDLE} replies`,
+      body: "Risk level and facts, in the thread.",
+    },
+    proof: {
+      title: "Proof before post",
+      body: "Hashed to Solana before it posts.",
+    },
+    scorecard: {
+      title: "Public scorecard",
+      body: "Every call, wrong ones included.",
+    },
+    rules: {
+      title: "Rules decide, AI only writes",
+      body: "Rules set the level. AI only writes.",
+    },
+    blink: {
+      title: "Blink, with risk first",
+      body: "Risk first. No buy button on HIGH.",
+    },
+    pro: {
+      title: "Pro alerts",
+      body: "Watchlist and DM alerts. Paid in USDC.",
+    },
+  },
+  };
+}
+
+function stepsCopy(HANDLE: string) {
+  return ["Someone posts a coin", `You tag ${HANDLE}`, "Lens checks the chain", "Proof, then reply"];
+}
+
+// Built from packages/core/src/risk/thresholds.ts so the page cannot drift from the rules.
+export const CHECKS = [
+  {
+    check: "Coin age",
+    danger: `Under ${AGE_DANGER_HOURS} hours (under ${AGE_CAUTION_HOURS / 24} days is caution)`,
+    good: "Months or years old",
+  },
+  { check: "Liquidity", danger: `Under $${LIQUIDITY_SMALL_USD / 1000}k, or can be pulled`, good: "Large and locked" },
+  {
+    check: "Top holders",
+    danger: `Top 10 wallets hold ${TOP10_DANGER_PCT}%+ (${TOP10_CAUTION_PCT}%+ is caution)`,
+    good: "Spread across many holders",
+  },
+  {
+    check: "Creator wallet",
+    danger: `Creator sold ${CREATOR_SOLD_DANGER_PCT}%+ (${CREATOR_SOLD_CAUTION_PCT}%+ is caution)`,
+    good: "Not selling",
+  },
+  { check: "Mint authority", danger: "Still on, creator can print more", good: "Turned off" },
+  { check: "Freeze authority", danger: "Still on, creator can freeze your coins", good: "Turned off" },
+  {
+    check: "Linked launch wallets",
+    danger: `Linked wallets hold ${SNIPER_DANGER_PCT}%+ (${SNIPER_CAUTION_PCT}%+ is caution)`,
+    good: "Normal buying",
+  },
+  { check: "Claims in the post", danger: "“Burned” or “locked” not backed by the chain", good: "Matches the chain" },
+  {
+    check: "Token-2022 traps",
+    danger: `Transfer fee ${TRANSFER_FEE_DANGER_BPS / 100}%+, transfer hook, permanent delegate, or frozen by default`,
+    good: "None present",
+  },
+];
+
+/** "9 checks" everywhere on the page comes from the table above. */
+export const CHECK_COUNT = CHECKS.length;
+
+export const SCORING = [
+  { level: "HIGH" as const, rule: "Two or more danger signs." },
+  { level: "MEDIUM" as const, rule: "One danger sign, two cautions, or too much missing data." },
+  { level: "LOW" as const, rule: "No major red flags found. Not a price prediction." },
+];
+
+export const FEED_COPY = {
+  title: "What it looks like on your timeline.",
+};
+
+export const PROOF = {
+  title: "Don’t trust the bot. Verify it.",
+  sample:
+    "$DANGER: HIGH risk.\n• Creator wallet sold 60% of supply.\n• Top 10 hold 86%.\nNot financial advice.",
+  timestamp: "2026-10-07T18:42:11Z",
+  points: [
+    "Exact reply hashed (SHA-256) and written to Solana. No proof, no post.",
+    "Anyone can re-hash and compare.",
+  ],
+};
+
+function statsCopy(freeChecksPerDay: number) {
+  return [
+  { label: "On-chain checks", value: CHECK_COUNT, suffix: "" },
+  { label: "Risk levels", value: 3, suffix: "" },
+  { label: "Edits possible after posting", value: 0, suffix: "" },
+  { label: "Free checks a day", value: freeChecksPerDay, suffix: "" },
+  ];
+}
+
+
+function pricingCopy(HANDLE: string, freeChecksPerDay: number, proPriceUsdc: number, proPeriodDays: number, swapFeeBps: number) {
+  return {
+  title: "Free to ask. Pro if you watch closely.",
+  plans: [
+    {
+      name: "Free",
+      price: "$0",
+      cadence: "",
+      blurb: `${freeChecksPerDay} checks a day`,
+      items: ["Public replies", "Full public record"],
+      cta: { label: `Tag ${HANDLE}`, kind: "x" as const },
+    },
+    {
+      name: "Pro",
+      price: `${proPriceUsdc} USDC`,
+      cadence: `/ ${proPeriodDays} days`,
+      blurb: "For watchlists",
+      items: ["No personal daily cap", "Private watchlist", "DM alerts when a token turns HIGH"],
+      cta: { label: "Pay with USDC", kind: "pro" as const },
+      note: "Pro never changes a risk level.",
+    },
+    {
+      name: "Trades via Blink",
+      price: `~${swapFeeBps / 100}%`,
+      cadence: "fee",
+      blurb: "On Blink trades",
+      items: ["Risk shown first", "Your own wallet, via Jupiter", "No buy button on HIGH"],
+      cta: { label: "See the record", kind: "record" as const },
+    },
+  ],
+  footnote: "Lens never takes money to promote a coin.",
+  };
+}
+
+export const CTA = {
+  title: "Check before you buy. Verify before you trust.",
+};
+
+export const DISCLAIMER =
+  "Lens is an automated account. It shows facts with sources, never a buy or sell instruction, and every reply ends with “Not financial advice.” Wrong calls stay public.";
+
+export function landingCopy(facts: LandingFacts) {
+  const handle = `@${facts.handle}`;
+  return {
+    HANDLE: handle,
+    HERO: heroCopy(handle),
+    FEATURES: featuresCopy(handle),
+    STEPS: stepsCopy(handle),
+    REAL_STATS: statsCopy(facts.freeChecksPerDay),
+    PRICING: pricingCopy(handle, facts.freeChecksPerDay, facts.proPriceUsdc, facts.proPeriodDays, facts.swapFeeBps),
+  };
+}
+
+export type LandingCopy = ReturnType<typeof landingCopy>;

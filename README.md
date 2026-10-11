@@ -8,12 +8,12 @@ This repo is the hackathon MVP: the reply loop, the proof, the scorecard, and a 
 
 ## Run it on a Mac
 
-Two apps live in this repo. The website (the scorecard) is `apps/web`. The marketing page is `apps/landing`. They use different ports, so you can run both at once.
+The website is `apps/web`. `/` is the marketing page. `/record` is the scorecard. They are one Next.js app, on port 3847.
 
 ### What you need
 
 - Node.js 20 or newer. Next.js also accepts 18.18 and 19.8. Node 22 works. npm comes with Node.
-- Git, and a terminal. Use a second terminal when you want the landing page up at the same time.
+- Git, and a terminal.
 
 Check the versions:
 
@@ -30,7 +30,7 @@ From the repo root:
 npm install
 ```
 
-That installs every workspace, including the website and the landing page, and generates the Prisma client.
+That installs every workspace and generates the Prisma client.
 
 ### Settings
 
@@ -63,13 +63,7 @@ Live mode uses real mainnet reads, a devnet proof, and the X API. Set the names 
 
 `LLM_MODE=template` keeps replies on the fixed template even if a model key is present.
 
-The landing page has its own optional file. The defaults already point at this Mac.
-
-```bash
-cp apps/landing/.env.example apps/landing/.env.local
-```
-
-Those names are `NEXT_PUBLIC_SITE_URL` (the landing page), `NEXT_PUBLIC_APP_URL` (the website), and `NEXT_PUBLIC_X_HANDLE`.
+The marketing page reads the same settings as the website (`X_BOT_HANDLE`, `PRO_PRICE_USDC`, and the other names in the table below). It does not use a second env file.
 
 ### Database
 
@@ -88,17 +82,7 @@ npm run dev
 
 `npm run demo` forces mock mode even if `.env` says otherwise. It simulates one mention on the `$DANGER` fixture, proves the reply, posts an outbound `$SAFE` call, and scores both immediately.
 
-Then open [http://127.0.0.1:3847](http://127.0.0.1:3847). Leave this terminal running.
-
-### Landing page
-
-In a second terminal, from the same repo root:
-
-```bash
-npm run dev:landing
-```
-
-Open [http://127.0.0.1:3848](http://127.0.0.1:3848). This page does not call an API, a wallet, or X. Its links go to the website on port 3847.
+Then open [http://127.0.0.1:3847](http://127.0.0.1:3847) for the marketing page, and [http://127.0.0.1:3847/record](http://127.0.0.1:3847/record) for the scorecard. Leave this terminal running.
 
 ### Worker
 
@@ -134,18 +118,16 @@ npm test
 npm run lint
 npm run typecheck
 npm run build
-npm run build:landing
 ```
 
-`npm run typecheck` covers the bot packages. The two build commands typecheck the website and the landing page.
+`npm run typecheck` covers the bot packages. `npm run build` typechecks the website, including the marketing page.
 
 ### If something will not start
 
-**Port already in use.** `npm run dev` needs port 3847. `npm run dev:landing` needs port 3848. If you see `EADDRINUSE`, a previous server is still running. Free the port, then start again:
+**Port already in use.** `npm run dev` needs port 3847. If you see `EADDRINUSE`, a previous server is still running. Free the port, then start again:
 
 ```bash
 lsof -ti :3847 | xargs kill
-lsof -ti :3848 | xargs kill
 ```
 
 **`package-lock.json` changed after you switched branches.** Run `npm install` so `node_modules` matches the branch you checked out. If `git status` then shows `package-lock.json` and you did not add a package, put the committed lockfile back and install again:
@@ -164,8 +146,7 @@ Do not commit that drift.
 | `npm run demo` | One simulated mention, end to end, in mock mode |
 | `npm run setup:devnet` | Create `data/devnet-keypair.json` if needed and request devnet SOL |
 | `npm run demo:devnet` | Same loop as the demo, but the memo is a real devnet transaction |
-| `npm run dev` | Scorecard and HTTP API on port 3847 |
-| `npm run dev:landing` | Marketing landing page on port 3848 (`apps/landing`). No API, wallet, or X calls |
+| `npm run dev` | Marketing page, scorecard, and HTTP API on port 3847 |
 | `npm run worker` | Poll mentions, run the outbound job and the editorial post, score due checks |
 | `npm run worker:once` | Single poll |
 | `npm run post -- --mint <address>` | Outbound post. HIGH becomes a warning, LOW a call, otherwise a note |
@@ -179,9 +160,8 @@ Do not commit that drift.
 | `npm run editorial:preview` | Print the next tip and term, today's activity recap, and a live market recap with X weighted lengths. No proof, no post |
 | `npm test` | Risk rules, proof hash/verify, Pro payments, discovery caps |
 | `npm run lint` | Lint the website |
-| `npm run typecheck` | Typecheck the bot packages. The Next apps are typechecked by their builds |
-| `npm run build` | Production build of the website |
-| `npm run build:landing` | Production build of the landing page |
+| `npm run typecheck` | Typecheck the bot packages and the website |
+| `npm run build` | Production build of the website, marketing page included |
 | `npm run db:push` | Create or update the database. Postgres when `DATABASE_URL` starts with `postgres` |
 
 The manual check form is at [http://127.0.0.1:3847/check](http://127.0.0.1:3847/check). The three buttons fill in mock fixtures (`$DANGER`, `$SAFE`, `$MID`).
@@ -191,8 +171,7 @@ The manual check form is at [http://127.0.0.1:3847/check](http://127.0.0.1:3847/
 ```
 packages/core    rules, resolver, reply writer, proof, providers, Pro, discovery
 packages/db      Prisma store and runtime wiring
-apps/web         Next.js scorecard, check API, verify API, Pro page, Blink
-apps/landing     Next.js marketing page (static, links to apps/web)
+apps/web         Next.js site: marketing page at /, scorecard at /record, check API, verify API, Pro page, Blink
 apps/worker      mention poller, outbound job, live X client
 prisma/          schema (SQLite by default; Postgres is generated at startup)
 scripts/         demo, devnet proof, discovery, live sample

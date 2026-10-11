@@ -123,6 +123,8 @@ Render sets `PORT`. The web start script uses `PORT` when it is present, otherwi
 curl https://YOUR_HOST/api/health
 ```
 
-You want `"ok": true` and `"db": "ok"`. Open `/` and `/pro`. A mock banner means `DATA_MODE` or `PROOF_MODE` is still `mock`. That is honest. Switch those two env vars and redeploy when the keys are in place.
+You want `"ok": true` and `"db": "ok"`. Open `/` (the marketing page), `/record` (the scorecard), and `/pro`. A mock banner on the scorecard means `DATA_MODE` or `PROOF_MODE` is still `mock`. That is honest. Switch those two env vars and redeploy when the keys are in place.
+
+The marketing page and the app are this one web service. `PUBLIC_BASE_URL` is the link-preview origin for `/`, and the home image is `apps/web/app/opengraph-image.png`. If a separate Netlify site still serves the old landing page, point that host at this URL (a site-wide redirect is enough) and stop building `apps/landing`. That app is no longer in the repo. No new env vars are required. `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` are unused. The handle, price, and free-check count on the landing page come from `X_BOT_HANDLE`, `PRO_PRICE_USDC`, `PRO_PERIOD_DAYS`, `RATE_LIMIT_PER_USER_PER_DAY`, `JUPITER_FEE_BPS`, and `SOLANA_CLUSTER`. A GitHub link in the landing footer still needs `NEXT_PUBLIC_GITHUB_URL` at build time.
 
 `npm run demo` on a laptop still forces mock mode. It does not touch the deployed database.
