@@ -1,5 +1,16 @@
 import { newId } from "../ids.js";
-import { isActivePro, normalizeHandle, type AlertRecord, type LinkCodeRecord, type PaymentRecord, type UserRecord, type WatchRecord } from "../accounts.js";
+import {
+  isActiveListing,
+  isActivePro,
+  normalizeHandle,
+  type AlertRecord,
+  type LinkCodeRecord,
+  type PaymentRecord,
+  type TeamInfo,
+  type UserRecord,
+  type VerifiedListingRecord,
+  type WatchRecord,
+} from "../accounts.js";
 import { CHECK_DATA_VERSION, type CheckRecord, type EditorialRecord, type MentionRecord, type OutcomeRecord } from "../types.js";
 import type { LensStore } from "./types.js";
 
@@ -18,6 +29,7 @@ export class MemoryStore implements LensStore {
   users = new Map<string, UserRecord>();
   watches = new Map<string, WatchRecord>();
   payments = new Map<string, PaymentRecord>();
+  listings = new Map<string, VerifiedListingRecord>();
   alerts = new Map<string, AlertRecord>();
   outbound = new Map<string, number>();
   linkCodes = new Map<string, LinkCodeRecord>();
@@ -402,6 +414,50 @@ export class MemoryStore implements LensStore {
     const current = this.payments.get(id);
     if (!current) throw new Error(`Unknown payment ${id}`);
     this.payments.set(id, { ...current, ...patch });
+  }
+
+  async getVerifiedListing(mint: string): Promise<VerifiedListingRecord | null> {
+    const found = this.listings.get(mint);
+    return found ? clone(found) : null;
+  }
+
+  async listActiveVerified(now: Date): Promise<VerifiedListingRecord[]> {
+    return [...this.listings.values()]
+      .filter((listing) => isActiveListing(listing, now))
+      .sort((a, b) => b.paidUntil.localeCompare(a.paidUntil))
+      .map(clone);
+  }
+
+  async extendVerifiedListing(input: {
+    mint: string;
+    userId: string;
+    ownerWallet: string;
+    paidUntil: string;
+  }): Promise<VerifiedListingRecord> {
+    const now = new Date().toISOString();
+    const current = this.listings.get(input.mint);
+    const next: VerifiedListingRecord = current
+      ? { ...current, ...input, updatedAt: now }
+      : {
+          ...input,
+          website: null,
+          xUrl: null,
+          telegramUrl: null,
+          auditUrl: null,
+          lockProofUrl: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+    this.listings.set(input.mint, next);
+    return clone(next);
+  }
+
+  async updateVerifiedInfo(mint: string, info: TeamInfo): Promise<VerifiedListingRecord> {
+    const current = this.listings.get(mint);
+    if (!current) throw new Error(`Unknown listing ${mint}`);
+    const next = { ...current, ...info, updatedAt: new Date().toISOString() };
+    this.listings.set(mint, next);
+    return clone(next);
   }
 
   async saveAlert(alert: AlertRecord): Promise<void> {

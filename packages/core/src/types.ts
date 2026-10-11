@@ -223,6 +223,9 @@ export interface LensConfig {
   rpcRetryAttempts: number;
   proPriceUsdc: number;
   proPeriodDays: number;
+  /** Lens Verified page for a coin team. Same USDC checkout as Pro. */
+  verifiedPriceUsdc: number;
+  verifiedPeriodDays: number;
   /** Unpaid Solana Pay checkouts older than this are reported as expired. A full transfer still confirms. */
   proCheckoutTtlHours: number;
   proTreasury?: string;

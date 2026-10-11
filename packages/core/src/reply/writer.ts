@@ -9,6 +9,7 @@ import {
   publicSiteLabel,
   replyHeader,
   shortMint,
+  singleLinkUrl,
   type ReplyDraftInput,
 } from "./policy.js";
 import { prepareReplyDraft, scrubThirdPartyText } from "./sanitize.js";
@@ -34,8 +35,9 @@ type WriterConfig = Pick<
 
 function systemPrompt(input: ReplyDraftInput): string {
   const lines = [...SYSTEM_SHARED];
-  if (input.swapUrl) {
-    lines.push("Do not include any URL. A swap link is added after you write.");
+  if (input.verified) lines.push("Do not mention Lens Verified. That line is added after you write.");
+  if (singleLinkUrl(input)) {
+    lines.push("Do not include any URL. A link is added after you write.");
   } else if (input.includeLinks) {
     lines.push("At most three short lines plus the report link.");
   } else {

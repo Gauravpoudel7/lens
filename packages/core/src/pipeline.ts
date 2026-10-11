@@ -1,10 +1,10 @@
-import { isLinkedPro } from "./accounts.js";
+import { isActiveListing, isLinkedPro } from "./accounts.js";
 import { queueWarningAlerts } from "./alerts.js";
 import { claimsFromPosts } from "./claims.js";
 import { listDexCandidates, type TokenCandidate } from "./discover.js";
 import { errorMessage, log, logError, newId, utcDay } from "./ids.js";
 import { evaluateRisk, levelSummary, snapshotToRuleInput } from "./risk/engine.js";
-import { assertSafeNotice, UNRESOLVED_REPLY } from "./reply/policy.js";
+import { assertSafeNotice, replyHasVerifiedLine, UNRESOLVED_REPLY } from "./reply/policy.js";
 import { safeSymbol, scrubThirdPartyText } from "./reply/sanitize.js";
 import type { ReplyWriter } from "./reply/writer.js";
 import { buildProofPayload, explorerTxUrl } from "./proof/hash.js";
@@ -14,6 +14,7 @@ import { resolveMentionToken, resolveToken } from "./resolver.js";
 import { decideSwapLink, replyHasSwapLink, wantsTradeLink } from "./swap.js";
 import type { LensStore } from "./store/types.js";
 import { CHECK_DATA_VERSION } from "./types.js";
+import { verifiedPageUrl, wantsVerifiedPage } from "./verified.js";
 import type {
   CheckKind,
   CheckRecord,
@@ -125,7 +126,9 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
 
     const sourceText = [parentText, incoming.text].filter(Boolean).join("\n");
     const parentPostId = incoming.parentId ?? incoming.id;
-    const askedToTrade = wantsTradeLink(incoming.text);
+    // "verify $TICKER" gets the normal check plus one Verified line, and never a swap link.
+    const askedVerify = wantsVerifiedPage(incoming.text);
+    const askedToTrade = !askedVerify && wantsTradeLink(incoming.text);
 
     const resolved = await resolveMentionToken(incoming.text, parentText, deps.provider);
     if (resolved?.status !== "token") {
@@ -151,8 +154,10 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
       return finishReply(deps, incoming, notice.check, false);
     }
 
-    const cached = await deps.store.findReusableCheck(parentPostId, resolved.mint);
-    if (cached && cachedReplyMatchesSwap(deps, incoming.text, cached)) {
+    // A cached reply is reused only when its Verified line matches what this mention asked for.
+    // A verify mention always reads the listing fresh, because it can lapse or start at any time.
+    const cached = askedVerify ? null : await deps.store.findReusableCheck(parentPostId, resolved.mint);
+    if (cached && !replyHasVerifiedLine(cached.replyText) && cachedReplyMatchesSwap(deps, incoming.text, cached)) {
       return finishReply(deps, incoming, cached, true);
     }
 
@@ -165,6 +170,7 @@ export async function processMention(deps: LensDeps, incoming: IncomingMention):
       mentionId: incoming.id,
       askedBy: incoming.authorUsername,
       offerSwap: askedToTrade,
+      verifiedPage: askedVerify,
     });
 
     if (!created.ok) {
@@ -271,6 +277,8 @@ export async function createRiskCheck(
     now?: Date;
     /** Mention text asked to buy, swap, or trade. Ignored unless kind is reply. */
     offerSwap?: boolean;
+    /** Mention said "verify $TICKER". Adds the Verified line. Ignored unless kind is reply. */
+    verifiedPage?: boolean;
   },
 ): Promise<
   | { ok: true; check: CheckRecord }
@@ -314,6 +322,12 @@ export async function createRiskCheck(
           mint: snapshot.mint,
         })
       : null;
+  // Read after the level is fixed. The listing only adds a line; it is never an input to evaluateRisk.
+  let verified: { active: boolean; url: string | null } | null = null;
+  if (input.kind === "reply" && input.verifiedPage) {
+    const active = isActiveListing(await deps.store.getVerifiedListing(snapshot.mint), now);
+    verified = { active, url: active ? verifiedPageUrl(deps.config.publicBaseUrl, snapshot.mint) : null };
+  }
   const written = await deps.writer.write({
     riskLevel: report.level,
     symbol: snapshot.symbol,
@@ -322,6 +336,7 @@ export async function createRiskCheck(
     facts: report.facts,
     reportUrl,
     swapUrl: decision?.include ? decision.url : undefined,
+    verified,
   });
   if (decision?.include) {
     if (written.text.includes(decision.url)) {

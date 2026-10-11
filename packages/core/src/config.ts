@@ -136,6 +136,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): LensConfig {
     rpcRetryAttempts: Math.max(1, Math.floor(num(env.RPC_RETRY_ATTEMPTS, 4))),
     proPriceUsdc: num(env.PRO_PRICE_USDC, DEFAULTS.proPriceUsdc),
     proPeriodDays: Math.max(1, Math.floor(num(env.PRO_PERIOD_DAYS, DEFAULTS.proPeriodDays))),
+    verifiedPriceUsdc: num(env.VERIFIED_PRICE_USDC, DEFAULTS.verifiedPriceUsdc),
+    verifiedPeriodDays: Math.max(1, Math.floor(num(env.VERIFIED_PERIOD_DAYS, DEFAULTS.verifiedPeriodDays))),
     proCheckoutTtlHours: Math.max(1, Math.floor(num(env.PRO_CHECKOUT_TTL_HOURS, 24))),
     proTreasury: clean(env.PRO_TREASURY_WALLET),
     proRpcUrl: clean(env.PRO_RPC_URL) ?? dataRpcUrl,

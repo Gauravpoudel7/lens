@@ -137,6 +137,7 @@ model Account {
   payments  Payment[]
   alerts    Alert[]
   linkCodes LinkCode[]
+  listings  VerifiedListing[]
 
   @@map("accounts")
 }
@@ -177,9 +178,31 @@ model Payment {
   recipient String
   signature String?
   status    String
+  /// pro | verified. Verified payments extend the listing for `listingMint`, never Pro.
+  purpose     String  @default("pro")
+  listingMint String?
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// A coin team's paid page. Active only while paidUntil is in the future, set by confirmUsdcCheckout.
+// Team fields are links the team supplied. They never feed the risk engine.
+model VerifiedListing {
+  mint         String   @id
+  userId       String
+  user         Account  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ownerWallet  String
+  paidUntil    DateTime
+  website      String?
+  xUrl         String?
+  telegramUrl  String?
+  auditUrl     String?
+  lockProofUrl String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([paidUntil])
 }
 
 model Alert {

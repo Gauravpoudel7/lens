@@ -6,6 +6,8 @@ export const DEFAULTS = {
   xBotHandle: "justasklens",
   proPriceUsdc: 10,
   proPeriodDays: 30,
+  verifiedPriceUsdc: 50,
+  verifiedPeriodDays: 30,
   rateLimitPerUserPerDay: 5,
   jupiterFeeBps: 50,
   alertDmsPerUserPerDay: 10,

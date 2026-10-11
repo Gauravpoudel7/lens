@@ -175,7 +175,7 @@ export async function prepareCheckoutTx(
   if (balance < amountRaw) {
     return fail(
       "insufficient_usdc",
-      `This wallet has ${usdc(balance)} USDC on ${where}. Pro costs ${usdc(amountRaw)} USDC.`,
+      `This wallet has ${usdc(balance)} USDC on ${where}. This costs ${usdc(amountRaw)} USDC.`,
     );
   }
   const createTreasuryAta = treasuryAtaOwner === null;

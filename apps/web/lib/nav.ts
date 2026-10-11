@@ -4,6 +4,7 @@ export const NAV = [
   { href: "/record", label: "Record" },
   { href: "/updates", label: "Updates" },
   { href: "/pro", label: "Pro" },
+  { href: "/verified", label: "Verified" },
   { href: "/account", label: "Account" },
   { href: "/verify", label: "Verify" },
 ];

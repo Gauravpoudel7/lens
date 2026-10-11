@@ -194,7 +194,7 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PROOF_MODE` | `mock` | `solana` sends a memo before posting |
 | `X_MODE` | `mock` | `live` polls and posts with the X API |
 | `LLM_MODE` | `auto` | `template` skips the model even if a key is set |
-| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Scorecard and Blink links. Omitted from X posts unless `X_REPLY_LINKS=true`. A non-local host is also the plain-text “Full report on …” line when `PUBLIC_SITE_NAME` is empty |
+| `PUBLIC_BASE_URL` | `http://127.0.0.1:3847` | Scorecard and Blink links. Omitted from X posts unless `X_REPLY_LINKS=true`. The opt-in swap link and the `verify $TICKER` Verified page URL are the exceptions. A non-local host is also the plain-text “Full report on …” line when `PUBLIC_SITE_NAME` is empty |
 | `PUBLIC_SITE_NAME` | empty | Plain-text place named in link-free replies, such as `Lens`. Omit it while the site is not public. Localhost does not count |
 | `X_BOT_HANDLE` | `justasklens` | The bot's X handle without `@`. The site and the link-code DM step use it |
 | `LENS_SESSION_SECRET` | empty | HMAC key for the 24-hour wallet session cookie on `/account`. Empty means a random key per process, so sessions end on restart. `npm run doctor` warns when it is empty |
@@ -240,6 +240,8 @@ If `DATABASE_URL` is unset, Lens uses an absolute path to `data/lens.db`. Do not
 | `PRO_TREASURY_WALLET` | empty | Wallet that receives Pro USDC |
 | `PRO_PRICE_USDC` | `10` | Price for one Pro period. The Pro page reads this. Unset means 10 USDC |
 | `PRO_PERIOD_DAYS` | `30` | How long Pro lasts after a confirmed transfer |
+| `VERIFIED_PRICE_USDC` | `50` | Price for one Lens Verified period. Paid from the token's creator wallet to `PRO_TREASURY_WALLET` |
+| `VERIFIED_PERIOD_DAYS` | `30` | How long a Verified page stays active after a confirmed transfer |
 | `ALERT_DMS_PER_USER_PER_DAY` | `10` | Warning DMs per Pro watcher per UTC day |
 | `ALERT_DMS_PER_DAY` | `100` | Warning DMs bot-wide per UTC day |
 | `PRO_CHECKOUT_TTL_HOURS` | `24` | Unpaid Solana Pay checkouts older than this are reported as expired. A full USDC transfer still confirms |
@@ -318,6 +320,8 @@ The hash covers the reply text only. The timestamp sits beside it. Verify with `
 - `POST /api/pro/nonce` `{ "wallet" }`, then `POST /api/pro/session` `{ "wallet", "nonce", "expiresAt", "signature" }` sets a 24-hour httpOnly `lens_session` cookie. `DELETE /api/pro/session` signs out
 - `GET /api/pro/account` with the cookie returns that wallet's plan, link code, and watchlist. With `?handle=` or `?wallet=` it returns only whether that account is Pro
 - `POST /api/pro/watch` and `DELETE` `{ "mint" }` need the cookie of an active Pro wallet and a same-site `Origin`
+- `POST /api/verified/checkout` `{ "wallet", "mint" }` starts a Lens Verified checkout. Needs the session cookie of that same wallet and a same-site `Origin`. Refused unless `wallet` is the token's creator wallet. Pay and confirm with the same `/api/pro/checkout/tx` and `/api/pro/confirm` routes; confirm returns `purpose` and `verifiedUntil`
+- `POST /api/verified/:mint` `{ "website", "xUrl", "telegramUrl", "auditUrl", "lockProofUrl" }` saves team links. Needs the session cookie of the wallet that paid, an active listing, a same-site `Origin`, and https links only
 - `GET /api/calls`
 - `GET /api/calls/:id`
 - `GET /api/stats`
@@ -347,6 +351,20 @@ Pro is bought by wallet. `POST /api/pro/checkout` takes `{ "wallet" }` only and 
 The home record and `/api/stats` count replies and outbound posts (`reply`, `call`, `warning`, `note`). Blink loads and the web form stay on their own report URLs so they cannot push those rows out of the last 500.
 
 Chain memos verify only when a signer is the proof wallet (`PROOF_SIGNER`, or the pubkey of `SOLANA_KEYPAIR` / `SOLANA_KEYPAIR_PATH`). Mock memos still verify in demo mode. If neither signer is set, a real memo does not verify.
+
+## Lens Verified
+
+A coin team can buy a page at `/verified/<mint>` for `VERIFIED_PRICE_USDC` (default 50) per `VERIFIED_PERIOD_DAYS` (default 30). It uses the same USDC Solana Pay checkout as Pro and the same treasury. Only the token's creator wallet (`creatorWallet` in the snapshot, from RugCheck or Birdeye), signed in with one wallet signature, can start a checkout or edit the page, so nobody else can post links under the coin's name. A token with no known creator cannot buy a page yet. A listing becomes active only when `confirmUsdcCheckout` sees the transfer on-chain. A Verified payment never sets Pro, and a Pro payment never creates a listing.
+
+The page shows the live rating from a check made in the last 15 minutes, or a new one counted against `CHECK_API_LIMIT_PER_HOUR`. The team adds up to five https links: website, X, Telegram, audit, and liquidity lock proof. They appear under “Provided by the team. Lens did not check these links.” They are not passed to the risk engine. A HIGH coin with a paid page stays HIGH. The “Checked by Lens” badge shows only while the listing is active and a check from the last 15 minutes is LOW. With mock data the badge says so. `/verified` lists active pages with each coin's latest stored level. It never runs a new check.
+
+`@justasklens verify $TICKER`, or `verify <mint>`, gets the normal proved reply plus one line before the disclaimer. The line is one of three:
+
+- `Lens Verified page: <PUBLIC_BASE_URL>/verified/<mint>` when the page is active and `PUBLIC_BASE_URL` is public https. That is then the only URL in the reply.
+- `Has a Lens Verified page.` when the page is active but the site is not public.
+- `No Lens Verified page.` otherwise.
+
+A verify mention never gets a swap link and never reuses a cached reply. The line is part of the text that is hashed and proved.
 
 ## Scoring
 

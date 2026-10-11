@@ -5,9 +5,13 @@ import {
   MockXClient,
   SCORECARD_KINDS,
   computeStats,
+  confirmUsdcCheckout,
   processMention,
   publishOutbound,
   scoreDueChecks,
+  startVerifiedCheckout,
+  usdcRaw,
+  type PaymentChain,
 } from "@lens/core";
 import { bootstrapEnv, createRuntime, repoRoot } from "@lens/db";
 import { schemaFile } from "./prepare-schema.mjs";
@@ -100,5 +104,36 @@ if (danger?.proof) {
   console.log(`  cluster: ${danger.proof.cluster}`);
   console.log(`  report: ${rt.config.publicBaseUrl}/r/${danger.id}`);
 }
+// Demo only: a Verified page for $SAFE, bought from its fixture creator wallet through the real checkout and
+// confirm path. The chain below is a stand-in that reports a mock transfer; the site shows the mock data banner.
+if (!(await rt.store.getVerifiedListing(FIXTURES.safe.mint))) {
+  const treasury = rt.config.proTreasury ?? "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+  const config = { ...rt.config, proTreasury: treasury };
+  let reference = "";
+  const chain: PaymentChain = {
+    async findPayments(ref) {
+      if (ref !== reference) return [];
+      const amount = usdcRaw(config.verifiedPriceUsdc).toString();
+      return [
+        {
+          signature: `mock_verified_${ref}`,
+          accountKeys: [treasury, ref],
+          pre: [{ owner: treasury, mint: config.usdcMint, amount: "0" }],
+          post: [{ owner: treasury, mint: config.usdcMint, amount }],
+        },
+      ];
+    },
+  };
+  const deps = { config, store: rt.store, chain, provider: rt.provider };
+  const started = await startVerifiedCheckout(deps, { wallet: FIXTURES.safe.creatorWallet, mint: FIXTURES.safe.mint });
+  if (started.ok) {
+    reference = started.session.reference;
+    const confirmed = await confirmUsdcCheckout(deps, reference);
+    console.log(`\nVerified page for $SAFE: ${confirmed.ok ? `active until ${confirmed.verifiedUntil}` : confirmed.error}`);
+  } else {
+    console.error("Verified demo checkout failed", started.error);
+  }
+}
 console.log(`\nOpen the scorecard at ${rt.config.publicBaseUrl}/record`);
+console.log(`Verified coins: ${rt.config.publicBaseUrl}/verified`);
 console.log("Start it with: npm run dev");

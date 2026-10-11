@@ -1,4 +1,12 @@
-import type { AlertRecord, LinkCodeRecord, PaymentRecord, UserRecord, WatchRecord } from "../accounts.js";
+import type {
+  AlertRecord,
+  LinkCodeRecord,
+  PaymentRecord,
+  TeamInfo,
+  UserRecord,
+  VerifiedListingRecord,
+  WatchRecord,
+} from "../accounts.js";
 import type { CheckRecord, EditorialRecord, MentionRecord, OutcomeRecord } from "../types.js";
 
 export interface LensStore {
@@ -97,6 +105,13 @@ export interface LensStore {
     id: string,
     patch: Partial<Pick<PaymentRecord, "status" | "signature">>,
   ): Promise<void>;
+
+  getVerifiedListing(mint: string): Promise<VerifiedListingRecord | null>;
+  /** Listings with paidUntil after `now`, newest payment period last to expire first. */
+  listActiveVerified(now: Date): Promise<VerifiedListingRecord[]>;
+  /** Creates the listing or moves its owner and paidUntil. Team links are kept. */
+  extendVerifiedListing(input: { mint: string; userId: string; ownerWallet: string; paidUntil: string }): Promise<VerifiedListingRecord>;
+  updateVerifiedInfo(mint: string, info: TeamInfo): Promise<VerifiedListingRecord>;
 
   saveAlert(alert: AlertRecord): Promise<void>;
   hasAlert(userId: string, checkId: string): Promise<boolean>;

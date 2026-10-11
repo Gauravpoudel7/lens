@@ -21,6 +21,11 @@ export interface ReplyDraftInput {
    * When set, this is the only URL in the reply.
    */
   swapUrl?: string | null;
+  /**
+   * Set for a "verify $TICKER" mention. Adds one line about the coin's Lens Verified page.
+   * When the page is active and `url` is set, that URL is the only one in the reply.
+   */
+  verified?: { active: boolean; url: string | null } | null;
 }
 
 export const DISCLAIMER = "Not financial advice.";
@@ -81,10 +86,33 @@ export function publicSiteLabel(config: { publicSiteName?: string; publicBaseUrl
   }
 }
 
+/** The one URL a reply may carry besides the report: the swap link or the Verified page. */
+export function singleLinkUrl(input: Pick<ReplyDraftInput, "swapUrl" | "verified">): string | null {
+  return input.swapUrl?.trim() || verifiedUrl(input.verified) || null;
+}
+
+function verifiedUrl(verified: ReplyDraftInput["verified"]): string | null {
+  return verified?.active ? verified.url?.trim() || null : null;
+}
+
+/** The Verified line. It never names a risk level; the level comes from the engine alone. */
+export function verifiedLine(verified: ReplyDraftInput["verified"]): string | null {
+  if (!verified) return null;
+  if (!verified.active) return "No Lens Verified page.";
+  const url = verifiedUrl(verified);
+  return url ? `Lens Verified page: ${url}` : "Has a Lens Verified page.";
+}
+
+const VERIFIED_LINE = /^(?:No |Has a )?Lens Verified page\b/i;
+
+export function replyHasVerifiedLine(text: string): boolean {
+  return text.split("\n").some((line) => VERIFIED_LINE.test(line.trim()));
+}
+
 export function closerLine(
-  input: Pick<ReplyDraftInput, "includeLinks" | "reportUrl" | "siteLabel" | "swapUrl">,
+  input: Pick<ReplyDraftInput, "includeLinks" | "reportUrl" | "siteLabel" | "swapUrl" | "verified">,
 ): string | null {
-  if (!input.swapUrl && linksRequested(input)) return `Report: ${input.reportUrl}`;
+  if (!singleLinkUrl(input) && linksRequested(input)) return `Report: ${input.reportUrl}`;
   const label = input.siteLabel?.trim();
   if (!label) return null;
   return `Full report on ${label}.`;
@@ -105,6 +133,9 @@ export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): str
   const header = replyHeader(input.symbol, input.riskLevel, input.mint);
   const closer = closerLine(input);
   const swapUrl = input.swapUrl?.trim() || null;
+  const extra = [swapUrl ? `Swap: ${swapUrl}` : null, verifiedLine(input.verified)].filter(
+    (line): line is string => Boolean(line),
+  );
   const ranked = factsForReply(input.facts).sort((a, b) => {
     const bySignal = SIGNAL_RANK[b.signal] - SIGNAL_RANK[a.signal];
     if (bySignal !== 0) return bySignal;
@@ -115,20 +146,20 @@ export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): str
   const shorts = ranked.map((fact) => fact.short.trim()).filter(Boolean);
   const chosen: string[] = [];
   for (const short of shorts) {
-    const candidate = render(header, [...chosen, short], closer, swapUrl);
+    const candidate = render(header, [...chosen, short], closer, extra);
     if (fitsX(candidate, maxLength)) chosen.push(short);
     else break;
   }
   let text: string;
   if (chosen.length === 0 && shorts[0]) {
     let fact = shorts[0];
-    text = render(header, [fact], closer, swapUrl);
+    text = render(header, [fact], closer, extra);
     while (text.length > 500 && fact.length > 24) {
       fact = `${fact.slice(0, fact.length - 8).trim()}…`;
-      text = render(header, [fact], closer, swapUrl);
+      text = render(header, [fact], closer, extra);
     }
   } else {
-    text = render(header, chosen, closer, swapUrl);
+    text = render(header, chosen, closer, extra);
   }
   if (swapUrl && text.length > 500) {
     return buildTemplateReply({ ...input, swapUrl: undefined }, maxLength);
@@ -136,10 +167,10 @@ export function buildTemplateReply(input: ReplyDraftInput, maxLength = 280): str
   return text;
 }
 
-function render(header: string, facts: string[], closer: string | null, swapUrl: string | null): string {
+function render(header: string, facts: string[], closer: string | null, extra: string[]): string {
   const lines = [header, ...facts.map((fact) => `• ${fact}`)];
   if (closer) lines.push(closer);
-  if (swapUrl) lines.push(`Swap: ${swapUrl}`);
+  lines.push(...extra);
   lines.push(DISCLAIMER);
   return lines.join("\n");
 }
@@ -165,7 +196,7 @@ export function enforceReplyPolicy(
     return { ok: false, text, reason: "risk level" };
   }
 
-  const swapOnly = Boolean(input.swapUrl?.trim());
+  const swapOnly = Boolean(singleLinkUrl(input));
   if (!swapOnly && linksRequested(input)) {
     if (!text.includes(input.reportUrl)) {
       text = text.replace(/\s*Not financial advice\.?\s*$/i, "").trim();
@@ -187,6 +218,7 @@ export function enforceReplyPolicy(
   }
   text = `${text}\n${DISCLAIMER}`;
   text = placeSwapLine(text, input.swapUrl);
+  text = placeLine(text, verifiedLine(input.verified), VERIFIED_LINE, verifiedUrl(input.verified));
 
   if (text.length > 500) return { ok: false, text, reason: "too long" };
   if (/\bscam\b/i.test(text)) return { ok: false, text, reason: "scam" };
@@ -197,13 +229,18 @@ export function enforceReplyPolicy(
 function placeSwapLine(text: string, swapUrl?: string | null): string {
   const url = swapUrl?.trim();
   if (!url) return text;
-  const line = `Swap: ${url}`;
+  return placeLine(text, `Swap: ${url}`, /^Swap:\s*/i, url);
+}
+
+/** Replaces any copy of `line` (matched by `own`) with one copy above the disclaimer. */
+function placeLine(text: string, line: string | null, own: RegExp, url: string | null): string {
+  if (!line) return text;
   const stripped = text
     .split("\n")
     .filter((row) => {
       const trimmed = row.trim();
-      if (/^Swap:\s*/i.test(trimmed)) return false;
-      return !trimmed.includes(url);
+      if (own.test(trimmed)) return false;
+      return !url || !trimmed.includes(url);
     })
     .join("\n")
     .trim();
@@ -215,8 +252,7 @@ function placeSwapLine(text: string, swapUrl?: string | null): string {
     next = stripped ? `${stripped}\n${line}` : line;
   }
   if (next.length > 500) return stripped;
-  const copies = next.split(url).length - 1;
-  if (copies !== 1) return stripped;
+  if (url && next.split(url).length - 1 !== 1) return stripped;
   return next;
 }
 

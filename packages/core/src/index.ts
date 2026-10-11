@@ -41,6 +41,7 @@ export * from "./editorial/cycle.js";
 export * from "./blink.js";
 export * from "./swap.js";
 export * from "./trade.js";
+export * from "./verified.js";
 export * from "./accounts.js";
 export * from "./net/retry.js";
 export * from "./net/rpc.js";

@@ -19,4 +19,11 @@ describe("record route", () => {
     expect(isCurrent("/updates", "/updates")).toBe(true);
     expect(isCurrent("/account", "/updates")).toBe(false);
   });
+
+  it("keeps Verified coins and proof Verify apart", () => {
+    expect(isCurrent("/verified", "/verified")).toBe(true);
+    expect(isCurrent("/verified/abc", "/verified")).toBe(true);
+    expect(isCurrent("/verified", "/verify")).toBe(false);
+    expect(isCurrent("/verify", "/verified")).toBe(false);
+  });
 });

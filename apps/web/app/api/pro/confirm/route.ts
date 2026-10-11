@@ -20,6 +20,8 @@ async function handlePost(request: Request) {
     signature: result.signature,
     already: result.already,
     user: { wallet: result.user.wallet },
+    purpose: result.purpose,
+    verifiedUntil: result.verifiedUntil,
     ...proStatus(result.user),
   });
 }

@@ -11,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${base}/check`, changeFrequency: "weekly", priority: 0.8 },
     { url: `${base}/updates`, changeFrequency: "daily", priority: 0.5 },
     { url: `${base}/pro`, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${base}/verified`, changeFrequency: "daily", priority: 0.5 },
     { url: `${base}/account`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${base}/verify`, changeFrequency: "monthly", priority: 0.4 },
   ];

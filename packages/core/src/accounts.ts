@@ -39,7 +39,29 @@ export interface PaymentRecord {
   recipient: string;
   signature: string | null;
   status: "pending" | "paid" | "failed";
+  /** Missing means Pro. A verified payment extends the listing for `listingMint` and never sets Pro. */
+  purpose?: "pro" | "verified";
+  listingMint?: string | null;
   createdAt: string;
+}
+
+/** Links a coin team supplied. Shown as "provided by the team". Never read by the risk engine. */
+export interface TeamInfo {
+  website: string | null;
+  xUrl: string | null;
+  telegramUrl: string | null;
+  auditUrl: string | null;
+  lockProofUrl: string | null;
+}
+
+export interface VerifiedListingRecord extends TeamInfo {
+  mint: string;
+  userId: string;
+  /** The token's creator wallet, which paid. Only it may edit the team links. */
+  ownerWallet: string;
+  paidUntil: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AlertRecord {
@@ -66,5 +88,11 @@ export function isLinkedPro(user: UserRecord | null | undefined, now = new Date(
 export function isActivePro(user: { proUntil: string | null } | null | undefined, now = new Date()): boolean {
   if (!user?.proUntil) return false;
   const until = Date.parse(user.proUntil);
+  return Number.isFinite(until) && until > now.getTime();
+}
+
+export function isActiveListing(listing: { paidUntil: string } | null | undefined, now = new Date()): boolean {
+  if (!listing) return false;
+  const until = Date.parse(listing.paidUntil);
   return Number.isFinite(until) && until > now.getTime();
 }

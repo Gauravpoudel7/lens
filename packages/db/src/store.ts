@@ -11,6 +11,7 @@ import {
   type MentionRecord,
   type OutcomeRecord,
   type PaymentRecord,
+  type VerifiedListingRecord,
   type TokenSnapshot,
   type UserRecord,
   type WatchRecord,
@@ -548,6 +549,8 @@ export function createPrismaStore(): LensStore {
           recipient: payment.recipient,
           signature: payment.signature,
           status: payment.status,
+          purpose: payment.purpose ?? "pro",
+          listingMint: payment.listingMint ?? null,
           createdAt: new Date(payment.createdAt),
         },
       });
@@ -563,6 +566,29 @@ export function createPrismaStore(): LensStore {
     },
     async updatePayment(id, patch) {
       await prisma.payment.update({ where: { id }, data: patch });
+    },
+    async getVerifiedListing(mint) {
+      const row = await prisma.verifiedListing.findUnique({ where: { mint } });
+      return row ? toListing(row) : null;
+    },
+    async listActiveVerified(now) {
+      const rows = await prisma.verifiedListing.findMany({
+        where: { paidUntil: { gt: now } },
+        orderBy: { paidUntil: "desc" },
+      });
+      return rows.map(toListing);
+    },
+    async extendVerifiedListing(input) {
+      const data = { userId: input.userId, ownerWallet: input.ownerWallet, paidUntil: new Date(input.paidUntil) };
+      const row = await prisma.verifiedListing.upsert({
+        where: { mint: input.mint },
+        create: { mint: input.mint, ...data },
+        update: data,
+      });
+      return toListing(row);
+    },
+    async updateVerifiedInfo(mint, info) {
+      return toListing(await prisma.verifiedListing.update({ where: { mint }, data: info }));
     },
     async saveAlert(alert) {
       await prisma.alert.create({
@@ -673,6 +699,8 @@ function toPayment(row: {
   recipient: string;
   signature: string | null;
   status: string;
+  purpose: string;
+  listingMint: string | null;
   createdAt: Date;
 }): PaymentRecord {
   return {
@@ -686,7 +714,30 @@ function toPayment(row: {
     recipient: row.recipient,
     signature: row.signature,
     status: row.status === "paid" || row.status === "failed" ? row.status : "pending",
+    purpose: row.purpose === "verified" ? "verified" : "pro",
+    listingMint: row.listingMint,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function toListing(row: {
+  mint: string;
+  userId: string;
+  ownerWallet: string;
+  paidUntil: Date;
+  website: string | null;
+  xUrl: string | null;
+  telegramUrl: string | null;
+  auditUrl: string | null;
+  lockProofUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): VerifiedListingRecord {
+  return {
+    ...row,
+    paidUntil: row.paidUntil.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 

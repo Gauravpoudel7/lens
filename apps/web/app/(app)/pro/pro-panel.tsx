@@ -22,6 +22,7 @@ type Confirmed = {
   already?: boolean;
   signature?: string;
   proUntil?: string | null;
+  verifiedUntil?: string | null;
   user?: { wallet?: string | null };
 };
 
@@ -56,16 +57,22 @@ function walletNotice(err: unknown, network: string): NoticeState {
   return { reason: "other", message: "The wallet did not send the payment. Try again." };
 }
 
+/**
+ * USDC checkout for Pro, or for a coin's Verified page when `listingMint` is set.
+ * Both confirm through /api/pro/confirm, which activates only after the transfer is on-chain.
+ */
 export function ProPanel({
   priceUsd,
   periodDays,
   treasurySet,
   ttlHours,
+  listingMint,
 }: {
   priceUsd: number;
   periodDays: number;
   treasurySet: boolean;
   ttlHours: number;
+  listingMint?: string;
 }) {
   const router = useRouter();
   const [network, setNetwork] = useState("");
@@ -78,6 +85,19 @@ export function ProPanel({
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [done, setDone] = useState<Confirmed | null>(null);
   const price = formatUsdc(priceUsd);
+  const checkoutUrl = listingMint ? "/api/verified/checkout" : "/api/pro/checkout";
+  const checkoutBody = (address: string) => (listingMint ? { wallet: address, mint: listingMint } : { wallet: address });
+
+  /** A Verified checkout needs the creator wallet signed in: one signature, then start again. */
+  async function startCheckout(address: string) {
+    try {
+      return await sendJson<{ session: Session }>(checkoutUrl, checkoutBody(address));
+    } catch (err) {
+      if (!listingMint || !(err instanceof RequestError) || err.reason !== "signin") throw err;
+      await signInWithWallet();
+      return sendJson<{ session: Session }>(checkoutUrl, checkoutBody(address));
+    }
+  }
 
   useEffect(() => {
     fetch("/api/pro/network")
@@ -135,6 +155,11 @@ export function ProPanel({
   /** After paying with the wallet in this browser, one signature signs in, then the account page opens. */
   async function finish(confirmed: Confirmed, signIn: boolean) {
     setDone(confirmed);
+    if (listingMint) {
+      // The Verified page reloads with the team-links form; it asks for a sign-in when saving.
+      router.refresh();
+      return;
+    }
     if (!signIn) return;
     setPending("signin");
     try {
@@ -159,7 +184,7 @@ export function ProPanel({
     try {
       const address = (await provider.connect()).publicKey.toString();
       setWallet(address);
-      const started = await sendJson<{ session: Session }>("/api/pro/checkout", { wallet: address });
+      const started = await startCheckout(address);
       ref = started.session.reference;
       setSession(started.session);
       setReference(ref);
@@ -187,7 +212,7 @@ export function ProPanel({
     setPending("link");
     setNotice(null);
     try {
-      const started = await sendJson<{ session: Session }>("/api/pro/checkout", { wallet: wallet.trim() });
+      const started = await startCheckout(wallet.trim());
       setSession(started.session);
       setReference(started.session.reference);
     } catch (err) {
@@ -211,6 +236,18 @@ export function ProPanel({
   }
 
   const accountHref = done?.user?.wallet ? `/account?wallet=${encodeURIComponent(done.user.wallet)}` : "/account";
+
+  if (done && listingMint) {
+    return (
+      <section id="checkout" className="space-y-3 rounded-2xl border border-low/40 bg-low-bg p-5" aria-live="polite">
+        <p className="text-lg font-semibold text-ink">{done.already ? "Already paid" : "Payment confirmed"}</p>
+        <p className="text-base leading-7 text-ink">
+          The Verified page is active{done.verifiedUntil ? ` until ${formatTime(done.verifiedUntil)}` : ""}. Add your team links
+          below.
+        </p>
+      </section>
+    );
+  }
 
   if (done) {
     return (
@@ -256,7 +293,11 @@ export function ProPanel({
         <section className={CARD}>
           <h2 className="font-serif text-2xl tracking-tight">Pay in this browser</h2>
           <Button type="button" disabled={busy || !treasurySet} onClick={() => void onPayWithWallet()}>
-            {pending === "pay" ? "Waiting for the wallet…" : `Pay ${price} USDC with Phantom`}
+            {pending === "pay"
+              ? "Waiting for the wallet…"
+              : listingMint
+                ? `Pay ${price} USDC from the creator wallet`
+                : `Pay ${price} USDC with Phantom`}
           </Button>
           {network ? (
             <p className="text-base text-muted">
@@ -277,7 +318,7 @@ export function ProPanel({
           {!session ? (
             <form onSubmit={onCreateLink} className="space-y-3">
               <label className="block text-base text-muted" htmlFor="wallet">
-                The wallet address you will pay from
+                {listingMint ? "The creator wallet you will pay from" : "The wallet address you will pay from"}
               </label>
               <Input
                 id="wallet"

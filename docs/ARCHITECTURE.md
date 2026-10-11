@@ -18,6 +18,7 @@ The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no 
 | Pipeline | `packages/core/src/pipeline.ts` | Mention handling, manual checks, outbound posts, daily cap. |
 | Pro billing | `packages/core/src/billing` | Solana Pay reference transfer. `PaymentRail` is the seam for a future card provider. |
 | Alerts | `packages/core/src/alerts.ts` | DM Pro watchers when a check is HIGH. |
+| Lens Verified | `packages/core/src/verified.ts`, `apps/web/app/(app)/verified` | Paid team page per mint. Creator-wallet checkout, team links, badge rule, `verify $TICKER` line. |
 | Discovery | `packages/core/src/discover.ts` | DexScreener token profiles and boosts. |
 | Outcome job | `packages/core/src/outcomes.ts` | Price change after N days. |
 | Scorecard | `apps/web` | Server-rendered record at `/record`, report page, check form, verify form, Pro checkout, and `/account`. The marketing page is `/` in the same app. |
@@ -78,7 +79,8 @@ Prisma (`prisma/schema.prisma`). The default provider is SQLite. A `postgresql:/
 - **BotCursor** — last mention id the poller handled.
 - **Account** — X handle, X user id, and/or wallet. `proUntil` is the paid period. Table name is `accounts` so Postgres does not collide with `USER`.
 - **Watch** — mint on an account's watchlist.
-- **Payment** — pending or paid USDC checkout, including the Solana Pay reference.
+- **Payment** — pending or paid USDC checkout, including the Solana Pay reference. `purpose` is `pro` (default) or `verified`; a verified payment names `listingMint`.
+- **VerifiedListing** — one paid Lens Verified page per mint: owner account and creator wallet, `paidUntil`, and five optional https team links. It is never read by the risk engine.
 - **Alert** — DM text for one user and one check. `queued` until an X user id exists, then `sent` or `failed`.
 - **OutboundDay** — how many calls and warnings were posted that UTC day.
 - **XOAuth2Token** — the current OAuth 2.0 access token, refresh token, and expiry. One row, id `oauth2`. A copy is also written to `data/x-oauth2.json`, which is gitignored. The newer `updatedAt` wins if the two copies differ.
@@ -151,6 +153,8 @@ Free mentions stop at `RATE_LIMIT_PER_USER_PER_DAY`. A user is Pro when `proUnti
 Pro checkout is by wallet only (`startUsdcCheckout`). X linking lives in `packages/core/src/billing/link.ts`: `issueOrReuseLinkCode` (only for active, unlinked Pro, only behind a wallet signature on `/api/pro/account`), `redeemLinkCode` (one DM), and `pollDmLinks` in `poll.ts` (gated on an open code and `X_DM_POLL_MS`). `store.linkXAccount` marks the code used and sets `xUserId`, `xHandle`, `xLinkedAt` in one transaction, folding in an older wallet-less account for the same handle. `isLinkedPro` is the only Pro check on X: mention cap bypass and warning DMs both need `xLinkedAt`.
 
 `confirmUsdcCheckout` reports `not_found` when the reference was never issued, `wrong_amount` when a transfer includes the reference but the USDC received is short, and `expired` when an unpaid checkout is older than `PRO_CHECKOUT_TTL_HOURS` (default 24). A full transfer still confirms after that window. The web app shows those reasons. It does not mark Pro from the form alone.
+
+Lens Verified uses the same checkout. `startVerifiedCheckout` loads the token and refuses any wallet that is not `snapshot.creatorWallet`, then opens a payment with `purpose: "verified"` at `VERIFIED_PRICE_USDC`. `confirmUsdcCheckout` branches on purpose after the transfer matches. Verified extends the listing's `paidUntil` and never touches `proUntil`. For a `verify $TICKER` mention, `createRiskCheck` reads the listing only after `evaluateRisk` has fixed the level. It passes `{ active, url }` to the writer, and `enforceReplyPolicy` places the Verified line above the disclaimer. The page badge comes from `verifiedView`: an active listing and a LOW check younger than 15 minutes.
 
 `npm run doctor` prints a ready / not-ready list and does not post. `npm run doctor -- --x` adds one `GET /2/users/me`. That flag does not refresh OAuth tokens.
 

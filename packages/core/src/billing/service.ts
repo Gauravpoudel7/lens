@@ -28,6 +28,8 @@ export interface BillingDeps {
     LensConfig,
     | "proPriceUsdc"
     | "proPeriodDays"
+    | "verifiedPriceUsdc"
+    | "verifiedPeriodDays"
     | "proCheckoutTtlHours"
     | "proTreasury"
     | "usdcMint"
@@ -53,28 +55,51 @@ export async function startUsdcCheckout(
   if (!isSolanaAddress(wallet)) {
     return { ok: false, error: "That wallet address is not valid." };
   }
+  return openCheckout(deps, wallet, {
+    amountUsd: deps.config.proPriceUsdc,
+    priceEnv: "PRO_PRICE_USDC",
+    message: `Lens Pro for ${deps.config.proPeriodDays} days`,
+    purpose: "pro",
+    listingMint: null,
+  });
+}
+
+/** Saves a pending USDC payment for this wallet and returns the Solana Pay session. Shared by Pro and Verified. */
+export async function openCheckout(
+  deps: BillingDeps,
+  wallet: string,
+  input: {
+    amountUsd: number;
+    priceEnv: string;
+    message: string;
+    purpose: "pro" | "verified";
+    listingMint: string | null;
+  },
+): Promise<{ ok: true; session: CheckoutSession; user: UserRecord } | { ok: false; error: string }> {
   if (!deps.config.proTreasury) {
-    logError("pro checkout refused", { detail: "PRO_TREASURY_WALLET is not set" });
+    logError(`${input.purpose} checkout refused`, { detail: "PRO_TREASURY_WALLET is not set" });
     return { ok: false, error: "Payments are not open yet. Try again later." };
   }
-  if (deps.config.proPriceUsdc <= 0) {
-    logError("pro checkout refused", { detail: "PRO_PRICE_USDC must be greater than zero" });
+  if (input.amountUsd <= 0) {
+    logError(`${input.purpose} checkout refused`, { detail: `${input.priceEnv} must be greater than zero` });
     return { ok: false, error: "Payments are not open yet. Try again later." };
   }
   const user = (await deps.store.findUser({ wallet })) ?? (await deps.store.upsertUser({ wallet }));
   const reference = newReference();
-  const amountRaw = usdcRaw(deps.config.proPriceUsdc).toString();
+  const amountRaw = usdcRaw(input.amountUsd).toString();
   const payment: PaymentRecord = {
     id: newId(),
     userId: user.id,
     provider: "solana_usdc",
     reference,
-    amountUsd: deps.config.proPriceUsdc,
+    amountUsd: input.amountUsd,
     amountRaw,
     mint: deps.config.usdcMint,
     recipient: deps.config.proTreasury,
     signature: null,
     status: "pending",
+    purpose: input.purpose,
+    listingMint: input.listingMint,
     createdAt: new Date().toISOString(),
   };
   await deps.store.savePayment(payment);
@@ -90,7 +115,7 @@ export async function startUsdcCheckout(
       amountUsd: payment.amountUsd,
       splToken: payment.mint,
       reference,
-      message: `Lens Pro for ${deps.config.proPeriodDays} days`,
+      message: input.message,
     }),
   };
   return { ok: true, session, user };
@@ -112,7 +137,15 @@ export async function confirmUsdcCheckout(
   reference: string,
   now = new Date(),
 ): Promise<
-  | { ok: true; user: UserRecord; signature: string; already: boolean }
+  | {
+      ok: true;
+      user: UserRecord;
+      signature: string;
+      already: boolean;
+      purpose: "pro" | "verified";
+      /** Set for a verified payment: the listing's new end. */
+      verifiedUntil: string | null;
+    }
   | { ok: false; error: string; reason: ConfirmFailureReason }
 > {
   const payment = await deps.store.getPaymentByReference(reference.trim());
@@ -122,8 +155,20 @@ export async function confirmUsdcCheckout(
   }
   const user = await deps.store.getUser(payment.userId);
   if (!user) return fail("The account for that checkout is missing.", "account_missing");
+  const purpose = payment.purpose === "verified" ? "verified" : "pro";
+  if (purpose === "verified" && !payment.listingMint) {
+    return fail("No checkout exists for that reference.", "not_found");
+  }
   if (payment.status === "paid" && payment.signature) {
-    return { ok: true, user, signature: payment.signature, already: true };
+    const listing = purpose === "verified" ? await deps.store.getVerifiedListing(payment.listingMint!) : null;
+    return {
+      ok: true,
+      user,
+      signature: payment.signature,
+      already: true,
+      purpose,
+      verifiedUntil: listing?.paidUntil ?? null,
+    };
   }
   const observed = await deps.chain.findPayments(payment.reference);
   const match = observed.find((row) => paymentSatisfied({ payment, observed: row }));
@@ -133,12 +178,26 @@ export async function confirmUsdcCheckout(
       return fail("That transaction was already used for another checkout.", "reused_signature");
     }
     await deps.store.updatePayment(payment.id, { status: "paid", signature: match.signature });
+    if (purpose === "verified") {
+      const listing = await deps.store.getVerifiedListing(payment.listingMint!);
+      // A lapsed listing restarts from now. A renewal by the same owner stacks on the current end.
+      const sameOwner = listing?.userId === user.id;
+      const end = sameOwner ? Date.parse(listing!.paidUntil) : Number.NaN;
+      const from = Math.max(now.getTime(), Number.isFinite(end) ? end : 0);
+      const extended = await deps.store.extendVerifiedListing({
+        mint: payment.listingMint!,
+        userId: user.id,
+        ownerWallet: user.wallet ?? "",
+        paidUntil: new Date(from + deps.config.verifiedPeriodDays * 86_400_000).toISOString(),
+      });
+      return { ok: true, user, signature: match.signature, already: false, purpose, verifiedUntil: extended.paidUntil };
+    }
     const periodMs = deps.config.proPeriodDays * 24 * 60 * 60 * 1000;
     const currentEnd = user.proUntil ? Date.parse(user.proUntil) : Number.NaN;
     const base = Math.max(now.getTime(), Number.isFinite(currentEnd) ? currentEnd : 0);
     const until = new Date(base + periodMs);
     const pro = await deps.store.setProUntil(user.id, until.toISOString());
-    return { ok: true, user: pro, signature: match.signature, already: false };
+    return { ok: true, user: pro, signature: match.signature, already: false, purpose, verifiedUntil: null };
   }
   const short = observed.find((row) => {
     if (!referenceSeen(payment, row)) return false;
