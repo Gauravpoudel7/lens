@@ -1,6 +1,6 @@
 # Architecture
 
-Lens is a TypeScript monorepo. `packages/core` holds the rules and the loop. `packages/db` is the only place that talks to Prisma. `apps/web` is the scorecard and the HTTP API. `apps/worker` polls X.
+Lens is a TypeScript monorepo. `packages/core` holds the rules and the loop. `packages/db` is the only place that talks to Prisma. `apps/web` is the public site and the HTTP API: the marketing page is `/`, the scorecard is `/record`. `apps/worker` polls X.
 
 The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no wallet. Proof is written before any post.
 
@@ -20,7 +20,7 @@ The model writes sentences. It does not pick LOW / MEDIUM / HIGH, and it has no 
 | Alerts | `packages/core/src/alerts.ts` | DM Pro watchers when a check is HIGH. |
 | Discovery | `packages/core/src/discover.ts` | DexScreener token profiles and boosts. |
 | Outcome job | `packages/core/src/outcomes.ts` | Price change after N days. |
-| Scorecard | `apps/web` | Server-rendered record, report page, check form, verify form, Pro checkout, and `/account`. |
+| Scorecard | `apps/web` | Server-rendered record at `/record`, report page, check form, verify form, Pro checkout, and `/account`. The marketing page is `/` in the same app. |
 | Blink | `packages/core/src/blink.ts` and `apps/web/app/api/actions/trade/[mint]` | Solana Action. Jupiter swap builder is separate. |
 
 ## Data flow

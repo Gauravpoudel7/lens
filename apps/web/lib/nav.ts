@@ -1,7 +1,7 @@
 /** The path a new user follows: check a token, read the record and updates, go Pro, then the account. */
 export const NAV = [
   { href: "/check", label: "Check" },
-  { href: "/", label: "Record" },
+  { href: "/record", label: "Record" },
   { href: "/updates", label: "Updates" },
   { href: "/pro", label: "Pro" },
   { href: "/account", label: "Account" },
@@ -9,6 +9,6 @@ export const NAV = [
 ];
 
 export function isCurrent(path: string, href: string): boolean {
-  if (href === "/") return path === "/" || path.startsWith("/r/");
+  if (href === "/record") return path === "/record" || path.startsWith("/r/");
   return path === href || path.startsWith(`${href}/`);
 }
