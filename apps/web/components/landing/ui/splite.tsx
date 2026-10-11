@@ -25,11 +25,14 @@ type BoundaryProps = {
 export class SplineLoadBoundary extends Component<BoundaryProps, { failed: boolean }> {
   state = { failed: false }
 
-  static getDerivedStateFromError(_error: unknown): { failed: boolean } {
+  static getDerivedStateFromError(error: unknown): { failed: boolean } {
+    void error
     return { failed: true }
   }
 
-  componentDidCatch(_error: unknown, _info?: unknown): void {
+  componentDidCatch(error: unknown, info?: unknown): void {
+    void error
+    void info
     this.props.onError()
   }
 
