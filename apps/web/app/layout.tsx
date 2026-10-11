@@ -25,10 +25,20 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 
+function metadataBase(): URL {
+  const fallback = "http://localhost:3847";
+  try {
+    return new URL(process.env.PUBLIC_BASE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim() || fallback);
+  } catch {
+    return new URL(fallback);
+  }
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const { xBotHandle } = await publicConfig();
   const description = `Is this Solana token risky? Ask @${xBotHandle} on X or check it here. Every answer is stamped on Solana.`;
   return {
+    metadataBase: metadataBase(),
     title: { default: "Lens", template: "%s · Lens" },
     description,
     openGraph: { title: "Lens", description, siteName: "Lens" },
